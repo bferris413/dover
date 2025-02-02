@@ -1,26 +1,92 @@
 use std::path::PathBuf;
 
-use clap::Parser;
-use dover::Diff;
+use clap::{Parser, Subcommand};
+use dover::{ChangeType, ChangedFile, Diff, Overview};
 
 #[derive(Parser)]
 #[command(author, version, about = "Diff OVERview")]
 struct Cli {
-    #[arg(long)]
-    file1: PathBuf,
+    #[command(subcommand)]
+    command: Option<Command>,
+}
 
-    #[arg(long)]
-    file2: PathBuf,
+#[derive(Subcommand)]
+enum Command {
+    Files {
+        #[arg(long)]
+        file1: PathBuf,
+
+        #[arg(long)]
+        file2: PathBuf,
+    },
 }
 
 fn main() {
     let args = Cli::parse();
+    if args.command.is_some() {
+        run_command(args.command.unwrap());
+        return;
+    }
 
-    let overview1 = dover::get_overview(args.file1).expect("Error getting overview for {file1}");
-    let overview2 = dover::get_overview(args.file2).expect("Error getting overview for {file2}");
+    let changes = dover::get_changed_files(PathBuf::from("."))
+        .unwrap()
+        .into_iter()
+        .filter(|c| c.path.extension().map_or(false, |ext| ext == "rs"));
 
-    println!("{overview1}");
-    println!("{overview2}");
+    for change in changes {
+        let path = change.path;
+        match change.change_type {
+            ChangeType::Modified {
+                before_contents,
 
-    println!("{}", overview1.diff_with(&overview2));
+                after_contents,
+            } => {
+                let overview1 = Overview::try_from((path.clone(), before_contents))
+                    .expect("Error getting overview");
+                let overview2 =
+                    Overview::try_from((path, after_contents)).expect("Error getting overview");
+
+                println!("{overview1}");
+                println!("{overview2}");
+
+                println!("{}", overview1.diff_with(&overview2));
+            }
+            ChangeType::Added { contents } => {
+                let overview1 = Overview::try_from((path.clone(), "".to_string()))
+                    .expect("Error getting overview");
+                let overview2 =
+                    Overview::try_from((path, contents)).expect("Error getting overview");
+
+                println!("{overview1}");
+                println!("{overview2}");
+
+                println!("{}", overview1.diff_with(&overview2));
+            }
+            ChangeType::Deleted { contents } => {
+                let overview1 =
+                    Overview::try_from((path.clone(), contents)).expect("Error getting overview");
+                let overview2 =
+                    Overview::try_from((path, "".to_string())).expect("Error getting overview");
+
+                println!("{overview1}");
+                println!("{overview2}");
+
+                println!("{}", overview1.diff_with(&overview2));
+            }
+        }
+    }
+}
+
+fn run_command(c: Command) {
+    match c {
+        Command::Files { file1, file2 } => {
+            let overview1 = Overview::try_from(file1).expect("Error getting overview for file1");
+            let overview2 = Overview::try_from(file2).expect("Error getting overview for file2");
+
+            println!("{overview1}");
+            println!("{overview2}");
+
+            println!("{}", overview1.diff_with(&overview2));
+        }
+    }
 }

@@ -7,11 +7,12 @@ use anyhow::{Context, Result};
 use syn::ItemUse;
 use syn::{File, Item, ItemFn, UseTree};
 
-/// Get an overview of a given Rust file.
-pub fn get_overview(path: PathBuf) -> Result<Overview> {
-    let contents = fs::read_to_string(&path).context("Error reading file at {path}")?;
-    let file: File = syn::parse_file(&contents).context("Error parsing {path}")?;
+mod git;
 
+pub use git::{get_changed_files, ChangeType, ChangedFile};
+
+fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
+    let file: File = syn::parse_file(&contents).context("Error parsing {path}")?;
     let mut use_statements = Vec::new();
     let mut functions = Vec::new();
 
@@ -136,6 +137,21 @@ pub struct Overview {
 impl Overview {
     pub fn uses(&self) -> &Uses {
         &self.uses
+    }
+}
+impl TryFrom<(PathBuf, String)> for Overview {
+    type Error = anyhow::Error;
+
+    fn try_from((path, contents): (PathBuf, String)) -> std::result::Result<Self, Self::Error> {
+        get_overview(path, contents)
+    }
+}
+impl TryFrom<PathBuf> for Overview {
+    type Error = anyhow::Error;
+
+    fn try_from(path: PathBuf) -> std::result::Result<Self, Self::Error> {
+        let contents = fs::read_to_string(&path).context("Error reading file at {path}")?;
+        get_overview(path, contents)
     }
 }
 impl Display for Overview {
