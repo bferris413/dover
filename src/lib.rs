@@ -1,14 +1,15 @@
-use std::collections::HashSet;
 use std::fmt::Display;
 use std::fs;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use syn::ItemUse;
 use syn::{File, Item, ItemFn, UseTree};
 
 /// Get an overview of a given Rust file.
-pub fn get_overview(path: &str) -> Result<Overview> {
-    let contents = fs::read_to_string(path).context("Error reading file at {path}")?;
+pub fn get_overview(path: PathBuf) -> Result<Overview> {
+    let contents = fs::read_to_string(&path).context("Error reading file at {path}")?;
     let file: File = syn::parse_file(&contents).context("Error parsing {path}")?;
 
     let mut use_statements = Vec::new();
@@ -26,7 +27,7 @@ pub fn get_overview(path: &str) -> Result<Overview> {
         }
     }
 
-    let mut use_paths = HashSet::new();
+    let mut use_paths = Vec::new();
     for r#use in use_statements.iter() {
         // let visibility = import.vis;
         let tree = &r#use.tree;
@@ -36,12 +37,13 @@ pub fn get_overview(path: &str) -> Result<Overview> {
     }
 
     let overview = Overview {
-        uses: use_paths,
-        functions,
+        path,
+        uses: Uses::from(use_paths),
     };
     Ok(overview)
 }
 
+/// Extract and return a collection of single `use` statements from a `UseTree`.
 fn get_paths_from_usetree(tree: &UseTree) -> Vec<Use> {
     let mut paths = Vec::new();
     match tree {
@@ -72,9 +74,54 @@ fn get_paths_from_usetree(tree: &UseTree) -> Vec<Use> {
     paths
 }
 
-/// A single import, without nesting, groups, or renames.
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct Use(pub String);
+/// A collection of `use` statements.
+///
+/// The internal representation is sorted and deduped.
+#[derive(Debug)]
+pub struct Uses(Vec<Use>);
+impl Uses {
+    /// Creates a complete set of `use` statements from a list of `Use`s.
+    pub fn from(mut uses: Vec<Use>) -> Self {
+        uses.sort();
+        uses.dedup();
+        Uses(uses)
+    }
+}
+impl Diff for Uses {
+    type Diff = UsesDiff;
+    fn diff_with(&self, other: &Self) -> Self::Diff {
+        let mut removed = Vec::new();
+        let mut added = Vec::new();
+
+        debug_assert!(self.0.is_sorted());
+        debug_assert!(other.0.is_sorted());
+
+        for use_ in &self.0 {
+            if let Err(_e) = other.0.binary_search(use_) {
+                // TODO: switch contents to references
+                removed.push(use_.clone());
+            }
+        }
+
+        for use_ in &other.0 {
+            if let Err(_e) = self.0.binary_search(use_) {
+                added.push(use_.clone());
+            }
+        }
+
+        UsesDiff { added, removed }
+    }
+}
+impl Deref for Uses {
+    type Target = [Use];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// A single use/import statement, without nesting, groups, or renames.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct Use(String);
 impl Display for Use {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -83,27 +130,111 @@ impl Display for Use {
 
 #[derive(Debug)]
 pub struct Overview {
-    uses: HashSet<Use>,
-    functions: Vec<ItemFn>,
+    path: PathBuf,
+    uses: Uses,
+}
+impl Overview {
+    pub fn uses(&self) -> &Uses {
+        &self.uses
+    }
 }
 impl Display for Overview {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let formatted_path = formatted_path(&self.path);
+
+        writeln!(f, "{formatted_path}")?;
         writeln!(f, "Imports:")?;
-        if self.uses.is_empty() {
+
+        if self.uses.0.is_empty() {
             writeln!(f, "  (none)")?;
         } else {
-            for import in self.uses.iter() {
+            for import in self.uses.0.iter() {
                 writeln!(f, "  {import}")?;
             }
         }
 
-        writeln!(f, "\nFunctions:")?;
-        for function in self.functions.iter() {
-            writeln!(f, "  {}", function.sig.ident)?;
+        // writeln!(f, "\nFunctions:")?;
+        // for function in self.functions.iter() {
+        //     writeln!(f, "  {}", function.sig.ident)?;
+        // }
+
+        Ok(())
+    }
+}
+impl Diff for Overview {
+    type Diff = OverviewDiff;
+    fn diff_with(&self, other: &Self) -> Self::Diff {
+        let uses_diff = self.uses.diff_with(&other.uses);
+        let file1 = self.path.clone();
+        let file2 = other.path.clone();
+
+        OverviewDiff {
+            file1,
+            file2,
+            uses_diff,
+        }
+    }
+}
+
+pub struct OverviewDiff {
+    file1: PathBuf,
+    file2: PathBuf,
+    uses_diff: UsesDiff,
+}
+impl Display for OverviewDiff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let fp1 = &self.file1.to_str().unwrap();
+        let fp2 = &self.file2.to_str().unwrap();
+        let header = underlined(&format!("{fp1} -> {fp2}"));
+        writeln!(f, "{header}")?;
+
+        writeln!(f, "Imports:")?;
+        if self.uses_diff.added.is_empty() && self.uses_diff.removed.is_empty() {
+            writeln!(f, "  (none)")?;
+        } else {
+            for import in self.uses_diff.added.iter() {
+                writeln!(f, "  + {import}")?;
+            }
+            for import in self.uses_diff.removed.iter() {
+                writeln!(f, "  - {import}")?;
+            }
         }
 
         Ok(())
     }
+}
+
+pub trait Diff {
+    type Diff;
+    fn diff_with(&self, other: &Self) -> Self::Diff;
+}
+
+pub struct UsesDiff {
+    added: Vec<Use>,
+    removed: Vec<Use>,
+}
+impl Display for UsesDiff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{{}}")?;
+        Ok(())
+    }
+}
+
+/// Returns the pathname with an underline of the same length.
+///
+///  appears as:
+///  foo/bar.rs
+///  ¯¯¯¯¯¯¯¯¯¯
+/// Panics on non-UTF-8 paths.
+fn formatted_path(path: &Path) -> String {
+    let path = path.to_str().unwrap();
+    underlined(path)
+}
+
+/// Returns the string with an underline of the same length.
+fn underlined(s: &str) -> String {
+    let underline = "¯".repeat(s.len());
+    format!("{s}\n{underline}")
 }
 
 #[cfg(test)]
@@ -234,6 +365,94 @@ mod tests {
                 Use("a::b::d::e".to_string()),
                 Use("a::f::g".to_string()),
                 Use("a::f::h::i".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn test_diff_with_no_changes() {
+        let uses1 = Uses::from(vec![
+            Use("std::fs::File".to_string()),
+            Use("std::io::Read".to_string()),
+        ]);
+        let uses2 = Uses::from(vec![
+            Use("std::fs::File".to_string()),
+            Use("std::io::Read".to_string()),
+        ]);
+
+        let diff = uses1.diff_with(&uses2);
+        assert!(diff.added.is_empty());
+        assert!(diff.removed.is_empty());
+    }
+
+    #[test]
+    fn test_diff_with_added_imports() {
+        let uses1 = Uses::from(vec![Use("std::fs::File".to_string())]);
+        let uses2 = Uses::from(vec![
+            Use("std::fs::File".to_string()),
+            Use("std::io::Read".to_string()),
+        ]);
+
+        let diff = uses1.diff_with(&uses2);
+        assert_eq!(diff.added, vec![Use("std::io::Read".to_string())]);
+        assert!(diff.removed.is_empty());
+    }
+
+    #[test]
+    fn test_diff_with_removed_imports() {
+        let uses1 = Uses::from(vec![
+            Use("std::fs::File".to_string()),
+            Use("std::io::Read".to_string()),
+        ]);
+        let uses2 = Uses::from(vec![Use("std::fs::File".to_string())]);
+
+        let diff = uses1.diff_with(&uses2);
+        assert!(diff.added.is_empty());
+        assert_eq!(diff.removed, vec![Use("std::io::Read".to_string())]);
+    }
+
+    #[test]
+    fn test_diff_with_added_and_removed_imports() {
+        let uses1 = Uses::from(vec![
+            Use("std::fs::File".to_string()),
+            Use("std::io::Read".to_string()),
+        ]);
+        let uses2 = Uses::from(vec![
+            Use("std::fs::File".to_string()),
+            Use("std::io::Write".to_string()),
+        ]);
+
+        let diff = uses1.diff_with(&uses2);
+        assert_eq!(diff.added, vec![Use("std::io::Write".to_string())]);
+        assert_eq!(diff.removed, vec![Use("std::io::Read".to_string())]);
+    }
+
+    #[test]
+    fn test_diff_with_multiple_changes() {
+        let uses1 = Uses::from(vec![
+            Use("std::fs::File".to_string()),
+            Use("std::io::Read".to_string()),
+            Use("std::path::Path".to_string()),
+        ]);
+        let uses2 = Uses::from(vec![
+            Use("std::fs::File".to_string()),
+            Use("std::fs::OpenOptions".to_string()),
+            Use("std::io::Write".to_string()),
+        ]);
+
+        let diff = uses1.diff_with(&uses2);
+        assert_eq!(
+            diff.added,
+            vec![
+                Use("std::fs::OpenOptions".to_string()),
+                Use("std::io::Write".to_string()),
+            ]
+        );
+        assert_eq!(
+            diff.removed,
+            vec![
+                Use("std::io::Read".to_string()),
+                Use("std::path::Path".to_string())
             ]
         );
     }
