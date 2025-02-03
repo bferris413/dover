@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use dover::{ChangeType, ChangedFile, Diff, Overview};
+use dover::{ChangeType, Diff, Overview};
 
 #[derive(Parser)]
 #[command(author, version, about = "Diff OVERview")]
@@ -12,13 +12,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    Files {
-        #[arg(long)]
-        file1: PathBuf,
-
-        #[arg(long)]
-        file2: PathBuf,
-    },
+    Files { file1: PathBuf, file2: PathBuf },
+    Overview { files: Vec<PathBuf> },
 }
 
 fn main() {
@@ -38,17 +33,12 @@ fn main() {
         match change.change_type {
             ChangeType::Modified {
                 before_contents,
-
                 after_contents,
             } => {
                 let overview1 = Overview::try_from((path.clone(), before_contents))
                     .expect("Error getting overview");
                 let overview2 =
                     Overview::try_from((path, after_contents)).expect("Error getting overview");
-
-                println!("{overview1}");
-                println!("{overview2}");
-
                 println!("{}", overview1.diff_with(&overview2));
             }
             ChangeType::Added { contents } => {
@@ -56,10 +46,6 @@ fn main() {
                     .expect("Error getting overview");
                 let overview2 =
                     Overview::try_from((path, contents)).expect("Error getting overview");
-
-                println!("{overview1}");
-                println!("{overview2}");
-
                 println!("{}", overview1.diff_with(&overview2));
             }
             ChangeType::Deleted { contents } => {
@@ -67,10 +53,6 @@ fn main() {
                     Overview::try_from((path.clone(), contents)).expect("Error getting overview");
                 let overview2 =
                     Overview::try_from((path, "".to_string())).expect("Error getting overview");
-
-                println!("{overview1}");
-                println!("{overview2}");
-
                 println!("{}", overview1.diff_with(&overview2));
             }
         }
@@ -83,10 +65,13 @@ fn run_command(c: Command) {
             let overview1 = Overview::try_from(file1).expect("Error getting overview for file1");
             let overview2 = Overview::try_from(file2).expect("Error getting overview for file2");
 
-            println!("{overview1}");
-            println!("{overview2}");
-
             println!("{}", overview1.diff_with(&overview2));
+        }
+        Command::Overview { files } => {
+            for file in files {
+                let overview = Overview::try_from(file).expect("Error getting overview");
+                println!("{overview}");
+            }
         }
     }
 }

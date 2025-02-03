@@ -28,6 +28,8 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
         }
     }
 
+    // dbg!(functions);
+
     let mut use_paths = Vec::new();
     for r#use in use_statements.iter() {
         // let visibility = import.vis;
@@ -200,8 +202,7 @@ pub struct OverviewDiff {
 impl Display for OverviewDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let fp1 = &self.file1.to_str().unwrap();
-        let fp2 = &self.file2.to_str().unwrap();
-        let header = underlined(&format!("{fp1} -> {fp2}"));
+        let header = underlined(&format!("{fp1}"));
         writeln!(f, "{header}")?;
 
         writeln!(f, "Imports:")?;

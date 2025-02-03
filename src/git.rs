@@ -45,6 +45,7 @@ pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
     let diff = repo
         .diff_index_to_workdir(None, None)
         .context("Failed to get diff from index to workdir")?;
+
     // let head = repo.head().context("Failed to get HEAD")?;
     // let head_commit = head.peel_to_commit().context("Failed to get HEAD commit")?;
     // let tree = head_commit
