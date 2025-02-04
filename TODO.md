@@ -10,13 +10,17 @@
   * return type
   * lifetime
   * generics
-  * basically all of `sig`
+  * (basically all of `sig`)
 - Identify trait pieces
 - Identify struct pieces
   * vis
   * fields
     * named
     * unnamed (tuples)
+- Tuple structs
+  * vis
+  * fields
+  * field vis
 - Identify enum pieces
 --------------------------------------------------------------------------------
 - done - Identify relevant bits of imports that we want to diff.
