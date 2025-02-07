@@ -4,7 +4,7 @@ use std::{fmt::Display, fs, path::PathBuf};
 
 /// Represents the type of change for a file.
 #[derive(Debug)]
-pub enum ChangeType {
+pub enum Change {
     Added {
         contents: String,
     },
@@ -16,9 +16,9 @@ pub enum ChangeType {
         contents: String,
     },
 }
-impl Display for ChangeType {
+impl Display for Change {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ChangeType::*;
+        use Change::*;
         match self {
             Added { .. } => write!(f, "+"),
             Modified { .. } => write!(f, "~"),
@@ -31,7 +31,7 @@ impl Display for ChangeType {
 #[derive(Debug)]
 pub struct ChangedFile {
     pub path: PathBuf,
-    pub change_type: ChangeType,
+    pub change_type: Change,
 }
 impl Display for ChangedFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -77,7 +77,7 @@ pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
 
                     let change = ChangedFile {
                         path: path.to_path_buf(),
-                        change_type: ChangeType::Added { contents },
+                        change_type: Change::Added { contents },
                     };
                     changed_files.push(change);
                 }
@@ -112,7 +112,7 @@ pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
                     let change = ChangedFile {
                         // assumes the above assert holds
                         path: new_path.to_path_buf(),
-                        change_type: ChangeType::Modified {
+                        change_type: Change::Modified {
                             before_contents,
                             after_contents,
                         },
@@ -134,7 +134,7 @@ pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
 
                     let change = ChangedFile {
                         path: path.to_path_buf(),
-                        change_type: ChangeType::Deleted { contents },
+                        change_type: Change::Deleted { contents },
                     };
                     changed_files.push(change);
                 }
