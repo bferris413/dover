@@ -1,8 +1,6 @@
+use crate::{Change, Diff, ExistenceChange};
 use std::{fmt::Display, ops::Deref};
-
 use syn::UseTree;
-
-use crate::Diff;
 
 /// A collection of `use` statements.
 ///
@@ -20,26 +18,32 @@ impl Uses {
 impl Diff for Uses {
     type Diff = UsesDiff;
     fn diff_with(&self, other: &Self) -> Self::Diff {
-        let mut removed = Vec::new();
-        let mut added = Vec::new();
+        let mut diffs = Vec::new();
 
         debug_assert!(self.0.is_sorted());
         debug_assert!(other.0.is_sorted());
 
         for use_ in &self.0 {
             if let Err(_e) = other.0.binary_search(use_) {
-                // TODO: switch contents to references
-                removed.push(use_.clone());
+                diffs.push(UseDiff {
+                    change: Change::Existence(ExistenceChange::Deleted),
+                    use_: use_.clone(),
+                });
             }
         }
 
         for use_ in &other.0 {
             if let Err(_e) = self.0.binary_search(use_) {
-                added.push(use_.clone());
+                diffs.push(UseDiff {
+                    change: Change::Existence(ExistenceChange::Added),
+                    use_: use_.clone(),
+                });
             }
         }
 
-        UsesDiff { added, removed }
+        diffs.sort_by(|d1, d2| d1.use_.0.cmp(&d2.use_.0));
+
+        UsesDiff { diffs }
     }
 }
 impl Deref for Uses {
@@ -58,13 +62,30 @@ impl Display for Use {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct UseDiff {
+    change: Change,
+    use_: Use,
+}
+impl Display for UseDiff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.change, self.use_)
+    }
+}
+
 pub struct UsesDiff {
-    pub added: Vec<Use>,
-    pub removed: Vec<Use>,
+    diffs: Vec<UseDiff>,
 }
 impl Display for UsesDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{{}}")?;
+        if self.diffs.is_empty() {
+            return writeln!(f, "(no changes)");
+        }
+
+        for diff in self.diffs.iter() {
+            writeln!(f, "{diff}")?;
+        }
+
         Ok(())
     }
 }
@@ -246,8 +267,7 @@ mod tests {
         ]);
 
         let diff = uses1.diff_with(&uses2);
-        assert!(diff.added.is_empty());
-        assert!(diff.removed.is_empty());
+        assert!(diff.diffs.is_empty());
     }
 
     #[test]
@@ -259,8 +279,11 @@ mod tests {
         ]);
 
         let diff = uses1.diff_with(&uses2);
-        assert_eq!(diff.added, vec![Use("std::io::Read".to_string())]);
-        assert!(diff.removed.is_empty());
+        let exp_diff = UseDiff {
+            change: Change::Existence(ExistenceChange::Added),
+            use_: Use("std::io::Read".to_string()),
+        };
+        assert_eq!(diff.diffs, vec![exp_diff]);
     }
 
     #[test]
@@ -272,8 +295,11 @@ mod tests {
         let uses2 = Uses::from(vec![Use("std::fs::File".to_string())]);
 
         let diff = uses1.diff_with(&uses2);
-        assert!(diff.added.is_empty());
-        assert_eq!(diff.removed, vec![Use("std::io::Read".to_string())]);
+        let exp_diff = vec![UseDiff {
+            change: Change::Existence(ExistenceChange::Deleted),
+            use_: Use("std::io::Read".to_string()),
+        }];
+        assert_eq!(diff.diffs, exp_diff);
     }
 
     #[test]
@@ -288,8 +314,17 @@ mod tests {
         ]);
 
         let diff = uses1.diff_with(&uses2);
-        assert_eq!(diff.added, vec![Use("std::io::Write".to_string())]);
-        assert_eq!(diff.removed, vec![Use("std::io::Read".to_string())]);
+        let exp_diff = vec![
+            UseDiff {
+                change: Change::Existence(ExistenceChange::Deleted),
+                use_: Use("std::io::Read".to_string()),
+            },
+            UseDiff {
+                change: Change::Existence(ExistenceChange::Added),
+                use_: Use("std::io::Write".to_string()),
+            },
+        ];
+        assert_eq!(diff.diffs, exp_diff);
     }
 
     #[test]
@@ -306,19 +341,24 @@ mod tests {
         ]);
 
         let diff = uses1.diff_with(&uses2);
-        assert_eq!(
-            diff.added,
-            vec![
-                Use("std::fs::OpenOptions".to_string()),
-                Use("std::io::Write".to_string()),
-            ]
-        );
-        assert_eq!(
-            diff.removed,
-            vec![
-                Use("std::io::Read".to_string()),
-                Use("std::path::Path".to_string())
-            ]
-        );
+        let exp_diff = vec![
+            UseDiff {
+                change: Change::Existence(ExistenceChange::Added),
+                use_: Use("std::fs::OpenOptions".to_string()),
+            },
+            UseDiff {
+                change: Change::Existence(ExistenceChange::Deleted),
+                use_: Use("std::io::Read".to_string()),
+            },
+            UseDiff {
+                change: Change::Existence(ExistenceChange::Added),
+                use_: Use("std::io::Write".to_string()),
+            },
+            UseDiff {
+                change: Change::Existence(ExistenceChange::Deleted),
+                use_: Use("std::path::Path".to_string()),
+            },
+        ];
+        assert_eq!(diff.diffs, exp_diff);
     }
 }

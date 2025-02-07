@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use dover::{ChangeType, Diff, Overview};
+use dover::{Diff, GitChange, Overview};
 
 #[derive(Parser)]
 #[command(author, version, about = "Diff OVERview")]
@@ -31,7 +31,7 @@ fn main() {
     for change in changes {
         let path = change.path;
         match change.change_type {
-            ChangeType::Modified {
+            GitChange::Modified {
                 before_contents,
                 after_contents,
             } => {
@@ -41,14 +41,14 @@ fn main() {
                     Overview::try_from((path, after_contents)).expect("Error getting overview");
                 println!("{}", overview1.diff_with(&overview2));
             }
-            ChangeType::Added { contents } => {
+            GitChange::Added { contents } => {
                 let overview1 = Overview::try_from((path.clone(), "".to_string()))
                     .expect("Error getting overview");
                 let overview2 =
                     Overview::try_from((path, contents)).expect("Error getting overview");
                 println!("{}", overview1.diff_with(&overview2));
             }
-            ChangeType::Deleted { contents } => {
+            GitChange::Deleted { contents } => {
                 let overview1 =
                     Overview::try_from((path.clone(), contents)).expect("Error getting overview");
                 let overview2 =

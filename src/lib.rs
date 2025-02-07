@@ -7,17 +7,51 @@ use quote::ToTokens;
 use syn::ItemUse;
 use syn::{File, Item, ItemFn};
 
+use overview::structs::{Struct, Structs, StructsDiff};
 use overview::uses::{self, Uses, UsesDiff};
 
 mod git;
 mod overview;
 
-pub use git::{get_changed_files, ChangeType, ChangedFile};
+pub use git::{get_changed_files, Change as GitChange, ChangedFile};
 
 /// Diff an item with another and return the result.
 pub trait Diff {
     type Diff;
     fn diff_with(&self, other: &Self) -> Self::Diff;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum Change {
+    Modified,
+    Existence(ExistenceChange),
+}
+impl Display for Change {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Change::Modified => write!(f, "~"),
+            Change::Existence(ex) => write!(f, "{ex}"),
+        }
+    }
+}
+impl From<ExistenceChange> for Change {
+    fn from(existence: ExistenceChange) -> Self {
+        Change::Existence(existence)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Copy)]
+pub enum ExistenceChange {
+    Added,
+    Deleted,
+}
+impl Display for ExistenceChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExistenceChange::Added => write!(f, "+"),
+            ExistenceChange::Deleted => write!(f, "-"),
+        }
+    }
 }
 
 fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
@@ -41,7 +75,9 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
         }
     }
 
-    dbg!(&structs);
+    let structs = structs.into_iter().map(Struct::from).collect();
+    let structs = Structs::from(structs);
+
     // dbg!(&functions);
     for func in functions.into_iter() {
         let func_sig = func.sig.into_token_stream();
@@ -61,6 +97,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
     let overview = Overview {
         path,
         uses: Uses::from(use_paths),
+        structs,
     };
     Ok(overview)
 }
@@ -69,6 +106,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
 pub struct Overview {
     path: PathBuf,
     uses: Uses,
+    structs: Structs,
 }
 impl Overview {
     pub fn uses(&self) -> &Uses {
@@ -93,15 +131,23 @@ impl TryFrom<PathBuf> for Overview {
 impl Display for Overview {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let formatted_path = formatted_path(&self.path);
-
         writeln!(f, "{formatted_path}")?;
-        writeln!(f, "Imports:")?;
 
+        writeln!(f, "Imports:")?;
         if self.uses.0.is_empty() {
             writeln!(f, "  (none)")?;
         } else {
             for import in self.uses.0.iter() {
                 writeln!(f, "  {import}")?;
+            }
+        }
+
+        writeln!(f, "\nStructs:")?;
+        if self.structs.is_empty() {
+            writeln!(f, "  (none)")?;
+        } else {
+            for st in self.structs.iter() {
+                writeln!(f, "  {st}")?;
             }
         }
 
@@ -117,6 +163,7 @@ impl Diff for Overview {
     type Diff = OverviewDiff;
     fn diff_with(&self, other: &Self) -> Self::Diff {
         let uses_diff = self.uses.diff_with(&other.uses);
+        let structs_diff = self.structs.diff_with(&other.structs);
         let file1 = self.path.clone();
         let file2 = other.path.clone();
 
@@ -124,6 +171,7 @@ impl Diff for Overview {
             file1,
             file2,
             uses_diff,
+            structs_diff,
         }
     }
 }
@@ -132,24 +180,29 @@ pub struct OverviewDiff {
     file1: PathBuf,
     file2: PathBuf,
     uses_diff: UsesDiff,
+    structs_diff: StructsDiff,
 }
 impl Display for OverviewDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let fp1 = &self.file1.to_str().unwrap();
-        let header = underlined(&format!("{fp1}"));
+        let fp2 = &self.file2.to_str().unwrap();
+        let header = underlined(&format!("{fp1} -> {fp2}"));
         writeln!(f, "{header}")?;
 
-        writeln!(f, "Imports:")?;
-        if self.uses_diff.added.is_empty() && self.uses_diff.removed.is_empty() {
-            writeln!(f, "  (none)")?;
-        } else {
-            for import in self.uses_diff.added.iter() {
-                writeln!(f, "  + {import}")?;
-            }
-            for import in self.uses_diff.removed.iter() {
-                writeln!(f, "  - {import}")?;
-            }
-        }
+        writeln!(f, "{}", underlined("Use"))?;
+        writeln!(f, "{}", self.uses_diff)?;
+
+        writeln!(f, "Structs:")?;
+        // if self.structs_diff.added.is_empty() && self.structs_diff.removed.is_empty() {
+        //     writeln!(f, "  (none)")?;
+        // } else {
+        //     for struct_ in self.structs_diff.added.iter() {
+        //         writeln!(f, "  + {struct_}")?;
+        //     }
+        //     for struct_ in self.structs_diff.removed.iter() {
+        //         writeln!(f, "  - {struct_}")?;
+        //     }
+        // }
 
         Ok(())
     }
