@@ -192,17 +192,8 @@ impl Display for OverviewDiff {
         writeln!(f, "{}", underlined("Use"))?;
         writeln!(f, "{}", self.uses_diff)?;
 
-        writeln!(f, "Structs:")?;
-        // if self.structs_diff.added.is_empty() && self.structs_diff.removed.is_empty() {
-        //     writeln!(f, "  (none)")?;
-        // } else {
-        //     for struct_ in self.structs_diff.added.iter() {
-        //         writeln!(f, "  + {struct_}")?;
-        //     }
-        //     for struct_ in self.structs_diff.removed.iter() {
-        //         writeln!(f, "  - {struct_}")?;
-        //     }
-        // }
+        writeln!(f, "{}", underlined("Structs"))?;
+        writeln!(f, "{}", self.structs_diff)?;
 
         Ok(())
     }

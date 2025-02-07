@@ -1,4 +1,4 @@
-use crate::{Change, Diff, ExistenceChange};
+use crate::{Diff, ExistenceChange};
 use std::{fmt::Display, ops::Deref};
 use syn::UseTree;
 
@@ -26,7 +26,7 @@ impl Diff for Uses {
         for use_ in &self.0 {
             if let Err(_e) = other.0.binary_search(use_) {
                 diffs.push(UseDiff {
-                    change: Change::Existence(ExistenceChange::Deleted),
+                    change: ExistenceChange::Deleted,
                     use_: use_.clone(),
                 });
             }
@@ -35,7 +35,7 @@ impl Diff for Uses {
         for use_ in &other.0 {
             if let Err(_e) = self.0.binary_search(use_) {
                 diffs.push(UseDiff {
-                    change: Change::Existence(ExistenceChange::Added),
+                    change: ExistenceChange::Added,
                     use_: use_.clone(),
                 });
             }
@@ -64,7 +64,7 @@ impl Display for Use {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct UseDiff {
-    change: Change,
+    change: ExistenceChange,
     use_: Use,
 }
 impl Display for UseDiff {
@@ -280,7 +280,7 @@ mod tests {
 
         let diff = uses1.diff_with(&uses2);
         let exp_diff = UseDiff {
-            change: Change::Existence(ExistenceChange::Added),
+            change: (ExistenceChange::Added),
             use_: Use("std::io::Read".to_string()),
         };
         assert_eq!(diff.diffs, vec![exp_diff]);
@@ -296,7 +296,7 @@ mod tests {
 
         let diff = uses1.diff_with(&uses2);
         let exp_diff = vec![UseDiff {
-            change: Change::Existence(ExistenceChange::Deleted),
+            change: (ExistenceChange::Deleted),
             use_: Use("std::io::Read".to_string()),
         }];
         assert_eq!(diff.diffs, exp_diff);
@@ -316,11 +316,11 @@ mod tests {
         let diff = uses1.diff_with(&uses2);
         let exp_diff = vec![
             UseDiff {
-                change: Change::Existence(ExistenceChange::Deleted),
+                change: (ExistenceChange::Deleted),
                 use_: Use("std::io::Read".to_string()),
             },
             UseDiff {
-                change: Change::Existence(ExistenceChange::Added),
+                change: (ExistenceChange::Added),
                 use_: Use("std::io::Write".to_string()),
             },
         ];
@@ -343,19 +343,19 @@ mod tests {
         let diff = uses1.diff_with(&uses2);
         let exp_diff = vec![
             UseDiff {
-                change: Change::Existence(ExistenceChange::Added),
+                change: (ExistenceChange::Added),
                 use_: Use("std::fs::OpenOptions".to_string()),
             },
             UseDiff {
-                change: Change::Existence(ExistenceChange::Deleted),
+                change: (ExistenceChange::Deleted),
                 use_: Use("std::io::Read".to_string()),
             },
             UseDiff {
-                change: Change::Existence(ExistenceChange::Added),
+                change: (ExistenceChange::Added),
                 use_: Use("std::io::Write".to_string()),
             },
             UseDiff {
-                change: Change::Existence(ExistenceChange::Deleted),
+                change: (ExistenceChange::Deleted),
                 use_: Use("std::path::Path".to_string()),
             },
         ];
