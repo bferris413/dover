@@ -12,17 +12,19 @@
   * generics
   * (basically all of `sig`)
 - Identify trait pieces
-- Identify struct pieces
+- Tuple structs
+  * done - vis
+  * fields
+  * field vis
+
+- struct field
+- Identify enum pieces
+--------------------------------------------------------------------------------
+- done - Identify struct pieces
   * vis
   * fields
     * named
     * unnamed (tuples)
-- Tuple structs
-  * vis
-  * fields
-  * field vis
-- Identify enum pieces
---------------------------------------------------------------------------------
 - done - Identify relevant bits of imports that we want to diff.
   * done - ItemUse.tree
   * done - Condense to single logical import per line

@@ -4,6 +4,8 @@ use syn::{ItemStruct, Visibility};
 
 use crate::{Change, Diff, ExistenceChange};
 
+use super::fields::Field;
+
 /// A collection of `struct` declarations.
 ///
 /// The internal representation is sorted and deduped.
@@ -74,10 +76,11 @@ impl Deref for Structs {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Struct {
     name: String,
     vis: Vis,
+    fields: Vec<Field>,
 }
 impl Struct {
     pub fn name(&self) -> &str {
@@ -112,12 +115,13 @@ impl From<ItemStruct> for Struct {
     fn from(s: ItemStruct) -> Self {
         let vis = s.vis.into();
         let name = s.ident.to_string();
-        Self { name, vis }
+        let fields = s.fields.into_iter().map(Field::from).collect();
+        Self { name, vis, fields }
     }
 }
 impl Display for Struct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:4} struct {}", self.vis.as_str(), self.name)
+        write!(f, "{} struct {}", self.vis.as_str(), self.name)
     }
 }
 
@@ -131,7 +135,7 @@ impl Vis {
     pub fn as_str(&self) -> &'static str {
         match self {
             Vis::Public => "pub",
-            Vis::Restricted => "pub*",
+            Vis::Restricted => "pub(..)",
             Vis::Inherited => "(none)",
         }
     }
