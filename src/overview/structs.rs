@@ -132,7 +132,7 @@ impl Vis {
         match self {
             Vis::Public => "pub",
             Vis::Restricted => "pub*",
-            Vis::Inherited => "_",
+            Vis::Inherited => "(none)",
         }
     }
 }
@@ -198,7 +198,9 @@ impl Display for StructDiff {
 
         writeln!(f, "{} struct {}:", self.change, self.name)?;
         if let Some(vd) = &self.vis_diff {
-            writeln!(f, "vis: {vd}")?;
+            writeln!(f, "vis:")?;
+            writeln!(f, "- {}", vd.before)?;
+            writeln!(f, "+ {}", vd.after)?;
         }
 
         Ok(())
@@ -211,6 +213,6 @@ pub struct VisDiff {
 }
 impl Display for VisDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} -> {}", self.before, self.after)
+        write!(f, "- {} + {}", self.before, self.after)
     }
 }
