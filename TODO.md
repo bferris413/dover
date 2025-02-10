@@ -12,14 +12,14 @@
   * generics
   * (basically all of `sig`)
 - Identify trait pieces
-- Tuple structs
-  * done - vis
+- Identify enum pieces
+- Refactor old/new pattern to use single underlying type
+--------------------------------------------------------------------------------
+- done - struct field
+- done - Tuple structs
+  * vis
   * fields
   * field vis
-
-- struct field
-- Identify enum pieces
---------------------------------------------------------------------------------
 - done - Identify struct pieces
   * vis
   * fields
