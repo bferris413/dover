@@ -4,7 +4,10 @@ use syn::{ItemStruct, Visibility};
 
 use crate::{Change, Diff, ExistenceChange};
 
-use super::fields::{Field, Fields, FieldsDiff};
+use super::{
+    fields::{Field, Fields, FieldsDiff},
+    generics::{Generics, GenericsDiff},
+};
 
 /// A collection of `struct` declarations.
 ///
@@ -37,12 +40,14 @@ impl Diff for Structs {
                 }
 
                 Err(_e) => {
+                    // file was deleted
                     let sdiff = StructDiff {
                         name: struct_.name().to_string(),
                         change: Change::Existence(ExistenceChange::Deleted),
                         struct_: Some(struct_.clone()),
                         vis_diff: None,
                         fields_diff: None,
+                        generics_diff: None,
                     };
                     struct_diffs.push(sdiff);
                 }
@@ -59,6 +64,7 @@ impl Diff for Structs {
                     struct_: Some(struct_.clone()),
                     vis_diff: None,
                     fields_diff: None,
+                    generics_diff: None,
                 };
                 struct_diffs.push(sdiff);
             }
@@ -83,6 +89,7 @@ pub struct Struct {
     name: String,
     vis: Vis,
     fields: Fields,
+    generics: Generics,
 }
 impl Struct {
     pub fn name(&self) -> &str {
@@ -106,12 +113,14 @@ impl Diff for Struct {
 
         let vis_diff = self.vis.diff_with(&other.vis);
         let fields_diff = self.fields.diff_with(&other.fields);
+        let generics_diff = self.generics.diff_with(&other.generics);
         Some(StructDiff {
             name: self_name.to_string(),
             change: Change::Modified,
             struct_: None,
             vis_diff,
             fields_diff,
+            generics_diff,
         })
     }
 }
@@ -121,7 +130,14 @@ impl From<ItemStruct> for Struct {
         let name = s.ident.to_string();
         let fields = s.fields.into_iter().map(Field::from).collect();
         let fields = Fields(fields);
-        Self { name, vis, fields }
+        let generics = Generics::from(s.generics);
+
+        Self {
+            name,
+            vis,
+            fields,
+            generics,
+        }
     }
 }
 impl Display for Struct {
@@ -201,6 +217,7 @@ pub struct StructDiff {
     vis_diff: Option<VisDiff>,
     #[allow(unused)]
     fields_diff: Option<FieldsDiff>,
+    generics_diff: Option<GenericsDiff>,
 }
 impl Display for StructDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

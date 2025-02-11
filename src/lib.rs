@@ -69,7 +69,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
                 functions.push(item_fn);
             }
             Item::Struct(item_struct) => {
-                structs.push(item_struct);
+                structs.push(dbg!(item_struct));
             }
             _ => {}
         }

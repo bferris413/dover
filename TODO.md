@@ -14,6 +14,11 @@
 - Identify trait pieces
 - Identify enum pieces
 - Refactor old/new pattern to use single underlying type
+- Generics in structs (type params)
+  * Inline types
+  * Where clauses
+  * Defaults
+- Generics in structs (lifetime params)
 --------------------------------------------------------------------------------
 - done - struct field
 - done - Tuple structs
