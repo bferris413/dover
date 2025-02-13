@@ -1,6 +1,6 @@
 use syn::{GenericParam, Generics as SynGenerics, WhereClause};
 
-use crate::Diff;
+use crate::{Change, Diff, ExistenceChange};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Generics {
@@ -16,6 +16,12 @@ impl Diff for Generics {
 
         let params_diff = self.params.diff_with(&other.params);
         let where_diff = self.where_clause.diff_with(&other.where_clause);
+
+        // it's possible for generics to be non-equal and yet the diffs don't contain
+        // anything we're interested in tracking.
+        if params_diff.is_none() && where_diff.is_none() {
+            return None;
+        }
 
         let diff = GenericsDiff {
             params_diff,
@@ -43,13 +49,37 @@ impl Diff for Vec<GenericParam> {
             return None;
         }
 
-        // let mut diffs = Vec::new();
-        // for (a, b) in self.iter().zip(other.iter()) {
-        //     let diff = a.diff_with(b);
-        //     diffs.push(diff);
-        // }
-        // Some(diffs)
-        todo!()
+        let mut param_diffs = Vec::new();
+
+        // extremely coarse, eventually we want to diff params themselves, but for
+        // now we just use full equality with added/removed changes (no modifications)
+        for old_param in self.iter() {
+            if !other.contains(old_param) {
+                let change = Change::Existence(ExistenceChange::Deleted);
+                let diff = GenericParamDiff {
+                    change,
+                    param: Some(old_param.clone()),
+                };
+                param_diffs.push(diff);
+            }
+        }
+
+        for new_param in other.iter() {
+            if !self.contains(new_param) {
+                let change = Change::Existence(ExistenceChange::Added);
+                let diff = GenericParamDiff {
+                    change,
+                    param: Some(new_param.clone()),
+                };
+                param_diffs.push(diff);
+            }
+        }
+
+        if param_diffs.is_empty() {
+            return None;
+        } else {
+            Some(param_diffs)
+        }
     }
 }
 
@@ -71,6 +101,9 @@ pub struct GenericsDiff {
 }
 
 #[derive(Debug)]
-pub struct GenericParamDiff;
+pub struct GenericParamDiff {
+    change: Change,
+    param: Option<GenericParam>,
+}
 #[derive(Debug)]
 pub struct WhereClauseDiff;
