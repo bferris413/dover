@@ -217,6 +217,7 @@ pub struct StructDiff {
     vis_diff: Option<VisDiff>,
     #[allow(unused)]
     fields_diff: Option<FieldsDiff>,
+    #[allow(unused)]
     generics_diff: Option<GenericsDiff>,
 }
 impl Display for StructDiff {

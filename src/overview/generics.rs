@@ -1,4 +1,4 @@
-use syn::{GenericParam, Generics as SynGenerics, WhereClause};
+use syn::{GenericParam, Generics as SynGenerics, WhereClause, WherePredicate};
 
 use crate::{Change, Diff, ExistenceChange};
 
@@ -51,7 +51,7 @@ impl Diff for Vec<GenericParam> {
 
         let mut param_diffs = Vec::new();
 
-        // extremely coarse, eventually we want to diff params themselves, but for
+        // extremely coarse. eventually we want to diff params themselves, but for
         // now we just use full equality with added/removed changes (no modifications)
         for old_param in self.iter() {
             if !other.contains(old_param) {
@@ -86,24 +86,86 @@ impl Diff for Vec<GenericParam> {
 impl Diff for Option<WhereClause> {
     type Diff = Option<WhereClauseDiff>;
     fn diff_with(&self, other: &Self) -> Self::Diff {
-        if self == other {
-            return None;
-        }
+        match dbg!((self, other)) {
+            (None, None) => None,
+            (Some(w1), Some(w2)) if w1 == w2 => None,
+            (Some(w1), None) => {
+                let change = Change::Existence(ExistenceChange::Deleted);
+                let diff = WhereClauseDiff {
+                    change,
+                    where_clause: Some(w1.clone()),
+                    predicates: None,
+                };
+                Some(diff)
+            }
+            (None, Some(w2)) => {
+                let change = Change::Existence(ExistenceChange::Added);
+                let diff = WhereClauseDiff {
+                    change,
+                    where_clause: Some(w2.clone()),
+                    predicates: None,
+                };
+                Some(diff)
+            }
+            (Some(w1), Some(w2)) => {
+                // coarse-grained predicate diff (only supports existence changes)
+                let mut predicate_diffs = Vec::new();
+                for predicate in w1.predicates.iter() {
+                    if !w2.predicates.iter().find(|p2| *p2 == predicate).is_some() {
+                        let change = Change::Existence(ExistenceChange::Deleted);
+                        let diff = PredicateDiff {
+                            change,
+                            predicate: Some(predicate.clone()),
+                        };
+                        predicate_diffs.push(diff);
+                    }
+                }
+                for predicate in w2.predicates.iter() {
+                    if !w1.predicates.iter().find(|p1| *p1 == predicate).is_some() {
+                        let change = Change::Existence(ExistenceChange::Added);
+                        let diff = PredicateDiff {
+                            change,
+                            predicate: Some(predicate.clone()),
+                        };
+                        predicate_diffs.push(diff);
+                    }
+                }
 
-        todo!()
+                assert!(!predicate_diffs.is_empty());
+                Some(WhereClauseDiff {
+                    change: Change::Modified,
+                    where_clause: None,
+                    predicates: Some(predicate_diffs),
+                })
+            }
+        }
     }
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
+pub struct PredicateDiff {
+    change: Change,
+    predicate: Option<WherePredicate>,
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
 pub struct GenericsDiff {
     params_diff: Option<Vec<GenericParamDiff>>,
     where_diff: Option<WhereClauseDiff>,
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct GenericParamDiff {
     change: Change,
     param: Option<GenericParam>,
 }
 #[derive(Debug)]
-pub struct WhereClauseDiff;
+#[allow(dead_code)]
+pub struct WhereClauseDiff {
+    change: Change,
+    where_clause: Option<WhereClause>,
+    predicates: Option<Vec<PredicateDiff>>,
+}

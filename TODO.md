@@ -15,8 +15,9 @@
 - Identify enum pieces
 - Refactor old/new pattern to use single underlying type
 - Generics in structs (type params)
-  * Inline types
-  * Where clauses
+  * done - Inline types
+  * type constraints
+  * done - Where clauses
   * Defaults
 - Generics in structs (lifetime params)
 --------------------------------------------------------------------------------
