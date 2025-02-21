@@ -86,7 +86,7 @@ impl Diff for Vec<GenericParam> {
 impl Diff for Option<WhereClause> {
     type Diff = Option<WhereClauseDiff>;
     fn diff_with(&self, other: &Self) -> Self::Diff {
-        match dbg!((self, other)) {
+        match (self, other) {
             (None, None) => None,
             (Some(w1), Some(w2)) if w1 == w2 => None,
             (Some(w1), None) => {

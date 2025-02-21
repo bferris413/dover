@@ -14,13 +14,15 @@
 - Identify trait pieces
 - Identify enum pieces
 - Refactor old/new pattern to use single underlying type
+- Generics in structs
+  * type constraints
+  * Defaults (?)
+- Generics in structs (lifetime params)
+- Visualization
+--------------------------------------------------------------------------------
 - Generics in structs (type params)
   * done - Inline types
-  * type constraints
   * done - Where clauses
-  * Defaults
-- Generics in structs (lifetime params)
---------------------------------------------------------------------------------
 - done - struct field
 - done - Tuple structs
   * vis
