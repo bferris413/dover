@@ -1,6 +1,7 @@
 use std::{fmt::Display, ops::Deref};
 
-use syn::{ItemStruct, Visibility};
+use quote::ToTokens;
+use syn::{File, Item, ItemStruct, Visibility};
 
 use crate::{Change, Diff, ExistenceChange};
 
@@ -40,11 +41,12 @@ impl Diff for Structs {
                 }
 
                 Err(_e) => {
-                    // file was deleted
+                    // struct was deleted
                     let sdiff = StructDiff {
                         name: struct_.name().to_string(),
                         change: Change::Existence(ExistenceChange::Deleted),
-                        struct_: Some(struct_.clone()),
+                        old: Some(struct_.original.clone()),
+                        new: None,
                         vis_diff: None,
                         fields_diff: None,
                         generics_diff: None,
@@ -61,7 +63,8 @@ impl Diff for Structs {
                 let sdiff = StructDiff {
                     name: struct_.name().to_string(),
                     change: Change::Existence(ExistenceChange::Added),
-                    struct_: Some(struct_.clone()),
+                    old: None,
+                    new: Some(struct_.original.clone()),
                     vis_diff: None,
                     fields_diff: None,
                     generics_diff: None,
@@ -90,6 +93,7 @@ pub struct Struct {
     vis: Vis,
     fields: Fields,
     generics: Generics,
+    original: ItemStruct,
 }
 impl Struct {
     pub fn name(&self) -> &str {
@@ -114,10 +118,12 @@ impl Diff for Struct {
         let vis_diff = self.vis.diff_with(&other.vis);
         let fields_diff = self.fields.diff_with(&other.fields);
         let generics_diff = self.generics.diff_with(&other.generics);
+
         Some(StructDiff {
             name: self_name.to_string(),
             change: Change::Modified,
-            struct_: None,
+            old: Some(self.original.clone()),
+            new: Some(other.original.clone()),
             vis_diff,
             fields_diff,
             generics_diff,
@@ -126,17 +132,19 @@ impl Diff for Struct {
 }
 impl From<ItemStruct> for Struct {
     fn from(s: ItemStruct) -> Self {
+        let original = s.clone();
         let vis = s.vis.into();
         let name = s.ident.to_string();
         let fields = s.fields.into_iter().map(Field::from).collect();
         let fields = Fields(fields);
-        let generics = Generics::from(s.generics);
+        let generics = Generics::from(s.generics.clone());
 
         Self {
             name,
             vis,
             fields,
             generics,
+            original,
         }
     }
 }
@@ -200,7 +208,7 @@ impl Display for StructsDiff {
         }
 
         for diff in self.structs.iter() {
-            writeln!(f, "{diff:#?}")?;
+            writeln!(f, "{diff}")?;
         }
 
         Ok(())
@@ -212,8 +220,10 @@ impl Display for StructsDiff {
 pub struct StructDiff {
     name: String,
     change: Change,
-    // only populated if change is added or deleted
-    struct_: Option<Struct>,
+    // present if the struct was deleted or modified
+    old: Option<ItemStruct>,
+    // present if the struct was added or modified
+    new: Option<ItemStruct>,
     vis_diff: Option<VisDiff>,
     #[allow(unused)]
     fields_diff: Option<FieldsDiff>,
@@ -223,15 +233,28 @@ pub struct StructDiff {
 impl Display for StructDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Change::Existence(ex) = self.change {
-            return write!(f, "{ex} {}", self.struct_.as_ref().unwrap());
+            let s = match (&self.old, &self.new) {
+                (Some(_), Some(_)) => panic!("old and new structs were both Some"),
+                (None, None) => panic!("old and new structs were both None"),
+                (Some(s), None) | (None, Some(s)) => s,
+            };
+
+            let source = get_source(vec![Item::Struct(s.clone())]);
+            return write!(f, "{ex} {source}");
         }
 
-        writeln!(f, "{} struct {}:", self.change, self.name)?;
-        if let Some(vd) = &self.vis_diff {
-            writeln!(f, "vis:")?;
-            writeln!(f, "- {}", vd.old)?;
-            writeln!(f, "+ {}", vd.new)?;
-        }
+        let old = self.old.as_ref().unwrap();
+        let new = self.new.as_ref().unwrap();
+        let old_source = get_source(vec![Item::Struct(old.clone())]);
+        let new_source = get_source(vec![Item::Struct(new.clone())]);
+        writeln!(f, "{} {old_source}", self.change)?;
+        writeln!(f, "{} {new_source}", self.change)?;
+
+        // if let Some(vd) = &self.vis_diff {
+        //     writeln!(f, "vis:")?;
+        //     writeln!(f, "- {}", vd.old)?;
+        //     writeln!(f, "+ {}", vd.new)?;
+        // }
 
         Ok(())
     }
@@ -241,4 +264,14 @@ impl Display for StructDiff {
 pub struct VisDiff {
     pub old: Vis,
     pub new: Vis,
+}
+
+fn get_source(items: Vec<Item>) -> String {
+    let syn_file = File {
+        items,
+        shebang: None,
+        attrs: vec![],
+    };
+
+    prettyplease::unparse(&syn_file)
 }

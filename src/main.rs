@@ -64,7 +64,6 @@ fn run_command(c: Command) {
         Command::Files { file1, file2 } => {
             let overview1 = Overview::try_from(file1).expect("Error getting overview for file1");
             let overview2 = Overview::try_from(file2).expect("Error getting overview for file2");
-
             println!("{}", overview1.diff_with(&overview2));
         }
         Command::Overview { files } => {
