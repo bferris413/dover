@@ -6,7 +6,7 @@ use syn::{File, Item, ItemStruct, Visibility};
 use crate::{Change, Diff, ExistenceChange};
 
 use super::{
-    fields::{Field, Fields, FieldsDiff},
+    fields::{Fields, FieldsDiff},
     generics::{Generics, GenericsDiff},
 };
 
@@ -135,7 +135,7 @@ impl From<ItemStruct> for Struct {
         let original = s.clone();
         let vis = s.vis.into();
         let name = s.ident.to_string();
-        let fields = s.fields.into_iter().map(Field::from).collect();
+        let fields = s.fields.into_iter().collect();
         let fields = Fields(fields);
         let generics = Generics::from(s.generics.clone());
 
@@ -260,6 +260,45 @@ impl Display for StructDiff {
             right_column.push(format!("+ {}", vd.new));
         }
 
+        if let Some(fd) = &self.fields_diff {
+            let mut old_fields = Vec::new();
+            let mut new_fields = Vec::new();
+
+            for fd in fd.diffs() {
+                if let Some(fd) = fd {
+                    match fd.change() {
+                        Change::Existence(ex) => {
+                            // field was added or deleted wholesale
+                            match ex {
+                                ExistenceChange::Deleted => {
+                                    let field_source =
+                                        fd.old().unwrap().to_token_stream().to_string();
+                                    old_fields.push(format!("- {field_source}",))
+                                }
+                                ExistenceChange::Added => {
+                                    let field_source =
+                                        fd.new().unwrap().to_token_stream().to_string();
+                                    new_fields.push(format!("+ {field_source}",))
+                                }
+                            }
+                        }
+                        Change::Modified => {
+                            // field was modified
+                            let old_field_source = fd.old().unwrap().to_token_stream().to_string();
+                            let new_field_source = fd.new().unwrap().to_token_stream().to_string();
+                            old_fields.push(format!("- {old_field_source}",));
+                            new_fields.push(format!("+ {new_field_source}",));
+                        }
+                    }
+                }
+            }
+
+            left_column.push("\nfields:".to_string());
+            right_column.push(String::new());
+            left_column.push(old_fields.join("\n"));
+            right_column.push(new_fields.join("\n"));
+        }
+
         // old and new generics, if any
         if let Some(gd) = &self.generics_diff {
             // generic param diff, if any
@@ -330,6 +369,8 @@ impl Display for StructDiff {
                 }
             }
         }
+
+        // field diff, if any
 
         let formatted_output = format_as_columns(&left_column, &right_column);
         writeln!(f, "{formatted_output}")

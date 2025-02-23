@@ -1,10 +1,9 @@
 use crate::{Change, Diff, ExistenceChange};
 
-use super::structs::{Vis, VisDiff};
 use syn::{FieldMutability, Type};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Fields(pub Vec<Field>);
+pub struct Fields(pub Vec<syn::Field>);
 impl Diff for Fields {
     type Diff = Option<FieldsDiff>;
 
@@ -21,10 +20,18 @@ impl Diff for Fields {
                     diffs.push(s1.diff_with(s2));
                 }
                 (Some(s1), None) => {
-                    diffs.push(Some(FieldDiff::new(s1.clone(), ExistenceChange::Deleted)));
+                    diffs.push(Some(FieldDiff {
+                        old: Some(s1.clone()),
+                        new: None,
+                        change: Change::Existence(ExistenceChange::Deleted),
+                    }));
                 }
                 (None, Some(s2)) => {
-                    diffs.push(Some(FieldDiff::new(s2.clone(), ExistenceChange::Added)));
+                    diffs.push(Some(FieldDiff {
+                        new: Some(s2.clone()),
+                        old: None,
+                        change: Change::Existence(ExistenceChange::Added),
+                    }));
                 }
                 (None, None) => break,
             }
@@ -44,122 +51,62 @@ impl Diff for Fields {
 pub struct FieldsDiff {
     diffs: Vec<Option<FieldDiff>>,
 }
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Field {
-    name: Option<String>,
-    vis: Vis,
-    mutability: FieldMutability,
-    ty: Type,
+impl FieldsDiff {
+    pub fn diffs(&self) -> &[Option<FieldDiff>] {
+        &self.diffs
+    }
 }
-impl Diff for Field {
+
+impl Diff for syn::Field {
     type Diff = Option<FieldDiff>;
     fn diff_with(&self, other: &Self) -> Self::Diff {
         if self == other {
             return None;
         }
-
-        let name_diff = if self.name != other.name {
-            Some(NameDiff {
-                old: self.name.clone(),
-                new: other.name.clone(),
-            })
-        } else {
-            None
-        };
-
-        let vis_diff = if self.vis != other.vis {
-            Some(VisDiff {
-                old: self.vis.clone(),
-                new: other.vis.clone(),
-            })
-        } else {
-            None
-        };
-
-        let mut_diff = if self.mutability != other.mutability {
-            Some(MutabilityDiff {
-                old: self.mutability.clone(),
-                new: other.mutability.clone(),
-            })
-        } else {
-            None
-        };
-
-        let type_diff = if self.ty != other.ty {
-            Some(TypeDiff {
-                old: self.ty.clone(),
-                new: other.ty.clone(),
-            })
-        } else {
-            None
-        };
-
         let change = Change::Modified;
-        let diff = FieldDiff {
-            name_diff,
-            vis_diff,
-            mut_diff,
+        let old = self.clone();
+        let new = other.clone();
+
+        Some(FieldDiff {
             change,
-            field: None,
-            type_diff,
-        };
-
-        Some(diff)
-    }
-}
-impl From<syn::Field> for Field {
-    fn from(field: syn::Field) -> Self {
-        let name = field.ident.map(|ident| ident.to_string());
-        let vis = field.vis.into();
-        let ty = field.ty;
-        let mutability = field.mutability;
-
-        Field {
-            name,
-            vis,
-            ty,
-            mutability,
-        }
+            old: Some(old),
+            new: Some(new),
+        })
     }
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct FieldDiff {
-    name_diff: Option<NameDiff>,
-    vis_diff: Option<VisDiff>,
-    mut_diff: Option<MutabilityDiff>,
     change: Change,
-    field: Option<Field>,
-    type_diff: Option<TypeDiff>,
+    old: Option<syn::Field>,
+    new: Option<syn::Field>,
 }
 impl FieldDiff {
-    fn new(field: Field, change: ExistenceChange) -> Self {
-        Self {
-            name_diff: None,
-            vis_diff: None,
-            mut_diff: None,
-            change: Change::Existence(change),
-            field: Some(field),
-            type_diff: None,
-        }
+    pub fn change(&self) -> Change {
+        self.change
+    }
+    pub fn old(&self) -> Option<&syn::Field> {
+        self.old.as_ref()
+    }
+    pub fn new(&self) -> Option<&syn::Field> {
+        self.new.as_ref()
     }
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct TypeDiff {
+pub struct TypeDiff {
     old: Type,
     new: Type,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct NameDiff {
+pub struct NameDiff {
     old: Option<String>,
     new: Option<String>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct MutabilityDiff {
+pub struct MutabilityDiff {
     old: FieldMutability,
     new: FieldMutability,
 }
