@@ -21,7 +21,7 @@ pub trait Diff {
     fn diff_with(&self, other: &Self) -> Self::Diff;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum Change {
     Modified,
     Existence(ExistenceChange),

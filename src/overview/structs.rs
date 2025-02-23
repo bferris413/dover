@@ -225,9 +225,7 @@ pub struct StructDiff {
     // present if the struct was added or modified
     new: Option<ItemStruct>,
     vis_diff: Option<VisDiff>,
-    #[allow(unused)]
     fields_diff: Option<FieldsDiff>,
-    #[allow(unused)]
     generics_diff: Option<GenericsDiff>,
 }
 impl Display for StructDiff {
@@ -243,21 +241,144 @@ impl Display for StructDiff {
             return write!(f, "{ex} {source}");
         }
 
+        let mut left_column = Vec::new();
+        let mut right_column = Vec::new();
+
+        // old and new struct declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
         let old_source = get_source(vec![Item::Struct(old.clone())]);
         let new_source = get_source(vec![Item::Struct(new.clone())]);
-        writeln!(f, "{} {old_source}", self.change)?;
-        writeln!(f, "{} {new_source}", self.change)?;
+        left_column.push(old_source);
+        right_column.push(new_source);
 
-        // if let Some(vd) = &self.vis_diff {
-        //     writeln!(f, "vis:")?;
-        //     writeln!(f, "- {}", vd.old)?;
-        //     writeln!(f, "+ {}", vd.new)?;
-        // }
+        // old and new visibility modifiers, if any
+        if let Some(vd) = &self.vis_diff {
+            left_column.push("\nvisibility:".to_string());
+            right_column.push(String::new());
+            left_column.push(format!("- {}", vd.old));
+            right_column.push(format!("+ {}", vd.new));
+        }
 
-        Ok(())
+        // old and new generics, if any
+        if let Some(gd) = &self.generics_diff {
+            // generic param diff, if any
+            if let Some(pd) = gd.params_diff() {
+                let mut old_params = Vec::new();
+                let mut new_params = Vec::new();
+
+                for pd in pd.iter() {
+                    let param_source = pd.param().unwrap().to_token_stream().to_string();
+                    // let param_source = get_source(vec![Item::Verbatim(param_tokens)]);
+                    match pd.change() {
+                        ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
+                        ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
+                    }
+                }
+
+                left_column.push("\ngeneric parameters:".to_string());
+                right_column.push(String::new());
+                left_column.push(old_params.join("\n"));
+                right_column.push(new_params.join("\n"));
+            }
+
+            // where clause diff, if any
+            if let Some(wd) = gd.where_diff() {
+                left_column.push("\nwhere clause:".to_string());
+                right_column.push(String::new());
+                match wd.change() {
+                    Change::Existence(ex) => {
+                        // where clause was added or deleted wholesale
+                        let where_clause_source =
+                            wd.where_clause().unwrap().to_token_stream().to_string();
+                        // let where_clause_source = get_source(vec![Item::Verbatim(where_clause)]);
+                        match ex {
+                            ExistenceChange::Deleted => {
+                                left_column.push(format!("- {where_clause_source}"));
+                                right_column.push(String::new());
+                            }
+                            ExistenceChange::Added => {
+                                right_column.push(format!("+ {where_clause_source}"));
+                                left_column.push(String::new());
+                            }
+                        }
+                    }
+                    Change::Modified => {
+                        // where clause predicates were added or deleted
+                        let predicate_diffs = wd.predicates().unwrap();
+                        let mut old_predicates = Vec::new();
+                        let mut new_predicates = Vec::new();
+
+                        for pred_diff in predicate_diffs.iter() {
+                            let predicate_source =
+                                pred_diff.predicate().unwrap().to_token_stream().to_string();
+                            // let predicate_source =
+                            //     get_source(vec![Item::Verbatim(predicate_tokens)]);
+                            match pred_diff.change() {
+                                ExistenceChange::Deleted => {
+                                    old_predicates.push(format!("- {predicate_source}",))
+                                }
+                                ExistenceChange::Added => {
+                                    new_predicates.push(format!("+ {predicate_source}",))
+                                }
+                            }
+                        }
+
+                        left_column.push(old_predicates.join("\n"));
+                        right_column.push(new_predicates.join("\n"));
+                    }
+                }
+            }
+        }
+
+        let formatted_output = format_as_columns(&left_column, &right_column);
+        writeln!(f, "{formatted_output}")
     }
+}
+
+fn format_as_columns(left: &Vec<String>, right: &Vec<String>) -> String {
+    // Each string is a section of the struct diff. We expect there to be an equal number
+    // of sections in the left and right columns, even though the number of lines per section
+    // may be different.
+    assert_eq!(left.len(), right.len());
+
+    // Get the maximum width of the left column across all lines within each section
+    // so we can align the right column.
+    let max_width = left
+        .iter()
+        .map(|s| s.lines().map(|s| s.len()).max().unwrap_or(0))
+        .max()
+        .unwrap()
+        .max(50);
+
+    let left_right = left.iter().zip(right.iter());
+    let mut formatted_output = String::new();
+
+    for (left, right) in left_right {
+        let mut left_lines = left.lines().collect::<Vec<_>>();
+        let mut right_lines = right.lines().collect::<Vec<_>>();
+
+        // Pad the left and right columns with empty lines so they have the same number of lines
+        // (zip short circuits when one of the iterators is exhausted)
+        while left_lines.len() < right_lines.len() {
+            left_lines.push("");
+        }
+        while right_lines.len() < left_lines.len() {
+            right_lines.push("");
+        }
+
+        for (left_line, right_line) in left_lines.iter().zip(right_lines.iter()) {
+            formatted_output.push_str(&format!(
+                "{:<width$} {}",
+                left_line,
+                right_line,
+                width = max_width
+            ));
+            formatted_output.push('\n');
+        }
+    }
+
+    formatted_output
 }
 
 #[derive(Debug, Eq, PartialEq)]

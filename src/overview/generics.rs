@@ -55,7 +55,7 @@ impl Diff for Vec<GenericParam> {
         // now we just use full equality with added/removed changes (no modifications)
         for old_param in self.iter() {
             if !other.contains(old_param) {
-                let change = Change::Existence(ExistenceChange::Deleted);
+                let change = ExistenceChange::Deleted;
                 let diff = GenericParamDiff {
                     change,
                     param: Some(old_param.clone()),
@@ -66,7 +66,7 @@ impl Diff for Vec<GenericParam> {
 
         for new_param in other.iter() {
             if !self.contains(new_param) {
-                let change = Change::Existence(ExistenceChange::Added);
+                let change = ExistenceChange::Added;
                 let diff = GenericParamDiff {
                     change,
                     param: Some(new_param.clone()),
@@ -112,7 +112,7 @@ impl Diff for Option<WhereClause> {
                 let mut predicate_diffs = Vec::new();
                 for predicate in w1.predicates.iter() {
                     if !w2.predicates.iter().find(|p2| *p2 == predicate).is_some() {
-                        let change = Change::Existence(ExistenceChange::Deleted);
+                        let change = ExistenceChange::Deleted;
                         let diff = PredicateDiff {
                             change,
                             predicate: Some(predicate.clone()),
@@ -122,7 +122,7 @@ impl Diff for Option<WhereClause> {
                 }
                 for predicate in w2.predicates.iter() {
                     if !w1.predicates.iter().find(|p1| *p1 == predicate).is_some() {
-                        let change = Change::Existence(ExistenceChange::Added);
+                        let change = ExistenceChange::Added;
                         let diff = PredicateDiff {
                             change,
                             predicate: Some(predicate.clone()),
@@ -145,8 +145,16 @@ impl Diff for Option<WhereClause> {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct PredicateDiff {
-    change: Change,
+    change: ExistenceChange,
     predicate: Option<WherePredicate>,
+}
+impl PredicateDiff {
+    pub fn change(&self) -> ExistenceChange {
+        self.change
+    }
+    pub fn predicate(&self) -> Option<&WherePredicate> {
+        self.predicate.as_ref()
+    }
 }
 
 #[derive(Debug)]
@@ -155,17 +163,46 @@ pub struct GenericsDiff {
     params_diff: Option<Vec<GenericParamDiff>>,
     where_diff: Option<WhereClauseDiff>,
 }
+impl GenericsDiff {
+    pub fn params_diff(&self) -> Option<&Vec<GenericParamDiff>> {
+        self.params_diff.as_ref()
+    }
+    pub fn where_diff(&self) -> Option<&WhereClauseDiff> {
+        self.where_diff.as_ref()
+    }
+}
 
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct GenericParamDiff {
-    change: Change,
+    change: ExistenceChange,
     param: Option<GenericParam>,
 }
+impl GenericParamDiff {
+    pub fn change(&self) -> ExistenceChange {
+        self.change
+    }
+    pub fn param(&self) -> Option<&GenericParam> {
+        self.param.as_ref()
+    }
+}
+
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct WhereClauseDiff {
     change: Change,
     where_clause: Option<WhereClause>,
     predicates: Option<Vec<PredicateDiff>>,
+}
+
+impl WhereClauseDiff {
+    pub fn change(&self) -> Change {
+        self.change
+    }
+    pub fn where_clause(&self) -> Option<&WhereClause> {
+        self.where_clause.as_ref()
+    }
+    pub fn predicates(&self) -> Option<&Vec<PredicateDiff>> {
+        self.predicates.as_ref()
+    }
 }
