@@ -12,14 +12,16 @@
   * generics
   * (basically all of `sig`)
 - Identify trait pieces
-- Identify enum pieces
 - Refactor old/new pattern to use single underlying type
-- Generics in structs
-  * type constraints
-  * Defaults (?)
-- Generics in structs (lifetime params)
-- Visualization
+- enum declaration
+- enum impl
+- struct impl
 --------------------------------------------------------------------------------
+- done Generics in structs
+  * done - type constraints
+  * Defaults (?)
+- done - Generics in structs (lifetime params)
+- done - Visualization (structs)
 - Generics in structs (type params)
   * done - Inline types
   * done - Where clauses

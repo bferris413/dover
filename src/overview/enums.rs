@@ -1,107 +1,59 @@
 use std::{fmt::Display, ops::Deref};
 
 use quote::ToTokens;
-use syn::{Item, ItemStruct};
+use syn::{Item, ItemEnum};
 
-use crate::{Change, Diff, ExistenceChange, Vis, VisDiff};
+use crate::{format_as_columns, get_source, Change, Diff, ExistenceChange, Vis, VisDiff};
 
 use super::{
-    fields::{Fields, FieldsDiff},
     generics::{Generics, GenericsDiff},
+    variants::{Variants, VariantsDiff},
 };
 
-/// A collection of `struct` declarations.
+/// A collection of `enum` declarations.
 ///
 /// The internal representation is sorted and deduped.
 #[derive(Debug)]
-pub struct Structs(pub Vec<Struct>);
-impl Structs {
-    /// Creates a complete set of `struct` declarations from a list of `Struct`s.
-    pub fn from(mut structs: Vec<Struct>) -> Self {
-        structs.sort_by(|s1, s2| s1.name().cmp(&s2.name()));
-        structs.dedup_by(|s1, s2| s1.name() == s2.name());
-        Structs(structs)
+pub struct Enums(pub Vec<Enum>);
+impl Enums {
+    /// Creates a complete set of `enum` declarations from a list of `Enum`s.
+    pub fn from(mut enums: Vec<Enum>) -> Self {
+        enums.sort_by(|s1, s2| s1.name().cmp(&s2.name()));
+        enums.dedup_by(|s1, s2| s1.name() == s2.name());
+        Enums(enums)
     }
 }
-impl Diff for Structs {
-    type Diff = StructsDiff;
+impl Diff for Enums {
+    type Diff = EnumsDiff;
     fn diff_with(&self, other: &Self) -> Self::Diff {
-        debug_assert!(self.0.is_sorted_by(|s1, s2| s1.name() <= s2.name()));
-        debug_assert!(other.0.is_sorted_by(|s1, s2| s1.name() <= s2.name()));
+        debug_assert!(self.0.is_sorted_by(|e1, e2| e1.name() <= e2.name()));
+        debug_assert!(other.0.is_sorted_by(|e1, e2| e1.name() <= e2.name()));
 
-        let mut struct_diffs = Vec::new();
-
-        // file1
-        for struct_ in &self.0 {
-            match other.0.binary_search_by(|s| s.name().cmp(struct_.name())) {
-                Ok(s) => {
-                    if let Some(diff) = struct_.diff_with(&other.0[s]) {
-                        struct_diffs.push(diff);
-                    }
-                }
-
-                Err(_e) => {
-                    // struct was deleted
-                    let sdiff = StructDiff {
-                        name: struct_.name().to_string(),
-                        change: Change::Existence(ExistenceChange::Deleted),
-                        old: Some(struct_.original.clone()),
-                        new: None,
-                        vis_diff: None,
-                        fields_diff: None,
-                        generics_diff: None,
-                    };
-                    struct_diffs.push(sdiff);
-                }
-            }
-        }
-
-        // file2
-        // Everything here is either new or already accounted for
-        for struct_ in &other.0 {
-            if let Err(_e) = self.0.binary_search_by(|s| s.name().cmp(struct_.name())) {
-                let sdiff = StructDiff {
-                    name: struct_.name().to_string(),
-                    change: Change::Existence(ExistenceChange::Added),
-                    old: None,
-                    new: Some(struct_.original.clone()),
-                    vis_diff: None,
-                    fields_diff: None,
-                    generics_diff: None,
-                };
-                struct_diffs.push(sdiff);
-            }
-        }
-
-        struct_diffs.sort_by(|d1, d2| d1.name.cmp(&d2.name));
-
-        StructsDiff {
-            structs: struct_diffs,
-        }
+        todo!()
     }
 }
-impl Deref for Structs {
-    type Target = [Struct];
+impl Deref for Enums {
+    type Target = [Enum];
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Struct {
+pub struct Enum {
     name: String,
     vis: Vis,
-    fields: Fields,
+    variants: Variants,
     generics: Generics,
-    original: ItemStruct,
+    original: ItemEnum,
 }
-impl Struct {
+impl Enum {
     pub fn name(&self) -> &str {
         &self.name
     }
 }
-impl Diff for Struct {
-    type Diff = Option<StructDiff>;
+impl Diff for Enum {
+    type Diff = Option<EnumDiff>;
     fn diff_with(&self, other: &Self) -> Self::Diff {
         let self_name = self.name();
         let other_name = other.name();
@@ -111,60 +63,59 @@ impl Diff for Struct {
         }
 
         if self_name != other_name {
-            // two different structs
             return None;
         }
 
         let vis_diff = self.vis.diff_with(&other.vis);
-        let fields_diff = self.fields.diff_with(&other.fields);
+        let variants_diff = self.variants.diff_with(&other.variants);
         let generics_diff = self.generics.diff_with(&other.generics);
 
-        Some(StructDiff {
+        Some(EnumDiff {
             name: self_name.to_string(),
             change: Change::Modified,
             old: Some(self.original.clone()),
             new: Some(other.original.clone()),
             vis_diff,
-            fields_diff,
+            variants_diff,
             generics_diff,
         })
     }
 }
-impl From<ItemStruct> for Struct {
-    fn from(s: ItemStruct) -> Self {
+impl From<ItemEnum> for Enum {
+    fn from(s: ItemEnum) -> Self {
         let original = s.clone();
-        let vis: Vis = s.vis.into();
+        let vis = s.vis.into();
         let name = s.ident.to_string();
-        let fields = s.fields.into_iter().collect();
-        let fields = Fields(fields);
+        let variants = s.variants.into_iter().collect();
+        let variants = Variants(variants);
         let generics = Generics::from(s.generics.clone());
 
         Self {
             name,
             vis,
-            fields,
+            variants,
             generics,
             original,
         }
     }
 }
-impl Display for Struct {
+impl Display for Enum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} struct {}", self.vis.as_str(), self.name)
     }
 }
 
 /// A collection of diffs for `struct` declarations.
-pub struct StructsDiff {
-    structs: Vec<StructDiff>,
+pub struct EnumsDiff {
+    enums: Vec<EnumDiff>,
 }
-impl Display for StructsDiff {
+impl Display for EnumsDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.structs.is_empty() {
+        if self.enums.is_empty() {
             return writeln!(f, "(no changes)");
         }
 
-        for diff in self.structs.iter() {
+        for diff in self.enums.iter() {
             writeln!(f, "{diff}")?;
         }
 
@@ -172,29 +123,29 @@ impl Display for StructsDiff {
     }
 }
 
-/// A diff between two struct declarations.
+/// A diff between two enum declarations.
 #[derive(Debug)]
-pub struct StructDiff {
+pub struct EnumDiff {
     name: String,
     change: Change,
-    // present if the struct was deleted or modified
-    old: Option<ItemStruct>,
-    // present if the struct was added or modified
-    new: Option<ItemStruct>,
+    // present if the enum was deleted or modified
+    old: Option<ItemEnum>,
+    // present if the enum was added or modified
+    new: Option<ItemEnum>,
     vis_diff: Option<VisDiff>,
-    fields_diff: Option<FieldsDiff>,
+    variants_diff: Option<VariantsDiff>,
     generics_diff: Option<GenericsDiff>,
 }
-impl Display for StructDiff {
+impl Display for EnumDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Change::Existence(ex) = self.change {
-            let s = match (&self.old, &self.new) {
-                (Some(_), Some(_)) => panic!("old and new structs were both Some"),
-                (None, None) => panic!("old and new structs were both None"),
-                (Some(s), None) | (None, Some(s)) => s,
+            let e = match (&self.old, &self.new) {
+                (Some(_), Some(_)) => panic!("old and new enums were both Some"),
+                (None, None) => panic!("old and new enums were both None"),
+                (Some(e), None) | (None, Some(e)) => e,
             };
 
-            let source = crate::get_source(vec![Item::Struct(s.clone())]);
+            let source = get_source(vec![Item::Enum(e.clone())]);
             return write!(f, "{ex} {source}");
         }
 
@@ -204,8 +155,8 @@ impl Display for StructDiff {
         // old and new struct declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
-        let old_source = crate::get_source(vec![Item::Struct(old.clone())]);
-        let new_source = crate::get_source(vec![Item::Struct(new.clone())]);
+        let old_source = get_source(vec![Item::Enum(old.clone())]);
+        let new_source = get_source(vec![Item::Enum(new.clone())]);
         left_column.push(old_source);
         right_column.push(new_source);
 
@@ -217,11 +168,11 @@ impl Display for StructDiff {
             right_column.push(format!("+ {}", vd.new));
         }
 
-        if let Some(fd) = &self.fields_diff {
+        if let Some(vd) = &self.variants_diff {
             let mut old_fields = Vec::new();
             let mut new_fields = Vec::new();
 
-            for fd in fd.diffs() {
+            for fd in vd.diffs() {
                 if let Some(fd) = fd {
                     match fd.change() {
                         Change::Existence(ex) => {
@@ -327,9 +278,7 @@ impl Display for StructDiff {
             }
         }
 
-        // field diff, if any
-
-        let formatted_output = crate::format_as_columns(&left_column, &right_column);
+        let formatted_output = format_as_columns(&left_column, &right_column);
         writeln!(f, "{formatted_output}")
     }
 }
