@@ -2,8 +2,8 @@
 // use rice;
 
 enum TrafficLight {
-    Red,
     Yellow,
+    Red,
 }
 // struct Thing<T, U>(T, U)
 // where

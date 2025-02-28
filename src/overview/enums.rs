@@ -7,7 +7,7 @@ use crate::{format_as_columns, get_source, Change, Diff, ExistenceChange, Vis, V
 
 use super::{
     generics::{Generics, GenericsDiff},
-    variants::{Variants, VariantsDiff},
+    variants::{VariantDiffs, Variants},
 };
 
 /// A collection of `enum` declarations.
@@ -29,7 +29,56 @@ impl Diff for Enums {
         debug_assert!(self.0.is_sorted_by(|e1, e2| e1.name() <= e2.name()));
         debug_assert!(other.0.is_sorted_by(|e1, e2| e1.name() <= e2.name()));
 
-        todo!()
+        let mut enum_diffs = Vec::new();
+
+        // file1
+        for enum_ in &self.0 {
+            match other.0.binary_search_by(|e| e.name().cmp(enum_.name())) {
+                Ok(e) => {
+                    if let Some(diff) = enum_.diff_with(&other.0[e]) {
+                        enum_diffs.push(diff);
+                    }
+                }
+
+                Err(_e) => {
+                    // enum was deleted
+                    let ediff = EnumDiff {
+                        name: enum_.name().to_string(),
+                        change: Change::Existence(ExistenceChange::Deleted),
+                        old: Some(enum_.original.clone()),
+                        new: None,
+                        vis_diff: None,
+                        variants_diff: None,
+                        generics_diff: None,
+                    };
+                    enum_diffs.push(ediff);
+                }
+            }
+        }
+
+        // file2
+        // Everything here is either new or already accounted for
+        for enum_ in &other.0 {
+            if let Err(_e) = self
+                .0
+                .binary_search_by(|r#enum| r#enum.name().cmp(enum_.name()))
+            {
+                let sdiff = EnumDiff {
+                    name: enum_.name().to_string(),
+                    change: Change::Existence(ExistenceChange::Added),
+                    old: None,
+                    new: Some(enum_.original.clone()),
+                    vis_diff: None,
+                    variants_diff: None,
+                    generics_diff: None,
+                };
+                enum_diffs.push(sdiff);
+            }
+        }
+
+        enum_diffs.sort_by(|d1, d2| d1.name.cmp(&d2.name));
+
+        EnumsDiff { enums: enum_diffs }
     }
 }
 impl Deref for Enums {
@@ -86,8 +135,8 @@ impl From<ItemEnum> for Enum {
         let original = s.clone();
         let vis = s.vis.into();
         let name = s.ident.to_string();
-        let variants = s.variants.into_iter().collect();
-        let variants = Variants(variants);
+        let variants: Vec<_> = s.variants.into_iter().collect();
+        let variants = Variants::from(variants);
         let generics = Generics::from(s.generics.clone());
 
         Self {
@@ -133,7 +182,7 @@ pub struct EnumDiff {
     // present if the enum was added or modified
     new: Option<ItemEnum>,
     vis_diff: Option<VisDiff>,
-    variants_diff: Option<VariantsDiff>,
+    variants_diff: Option<VariantDiffs>,
     generics_diff: Option<GenericsDiff>,
 }
 impl Display for EnumDiff {
@@ -152,7 +201,7 @@ impl Display for EnumDiff {
         let mut left_column = Vec::new();
         let mut right_column = Vec::new();
 
-        // old and new struct declarations
+        // old and new neum declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
         let old_source = get_source(vec![Item::Enum(old.clone())]);
@@ -169,42 +218,40 @@ impl Display for EnumDiff {
         }
 
         if let Some(vd) = &self.variants_diff {
-            let mut old_fields = Vec::new();
-            let mut new_fields = Vec::new();
+            let mut old_variants = Vec::new();
+            let mut new_variants = Vec::new();
 
-            for fd in vd.diffs() {
-                if let Some(fd) = fd {
-                    match fd.change() {
-                        Change::Existence(ex) => {
-                            // field was added or deleted wholesale
-                            match ex {
-                                ExistenceChange::Deleted => {
-                                    let field_source =
-                                        fd.old().unwrap().to_token_stream().to_string();
-                                    old_fields.push(format!("- {field_source}",))
-                                }
-                                ExistenceChange::Added => {
-                                    let field_source =
-                                        fd.new().unwrap().to_token_stream().to_string();
-                                    new_fields.push(format!("+ {field_source}",))
-                                }
+            for vd in vd.diffs() {
+                match vd.change() {
+                    Change::Existence(ex) => {
+                        // variant was added or deleted wholesale
+                        match ex {
+                            ExistenceChange::Deleted => {
+                                let variant_source =
+                                    vd.old().unwrap().to_token_stream().to_string();
+                                old_variants.push(format!("- {variant_source}",))
+                            }
+                            ExistenceChange::Added => {
+                                let variant_source =
+                                    vd.new().unwrap().to_token_stream().to_string();
+                                new_variants.push(format!("+ {variant_source}",))
                             }
                         }
-                        Change::Modified => {
-                            // field was modified
-                            let old_field_source = fd.old().unwrap().to_token_stream().to_string();
-                            let new_field_source = fd.new().unwrap().to_token_stream().to_string();
-                            old_fields.push(format!("- {old_field_source}",));
-                            new_fields.push(format!("+ {new_field_source}",));
-                        }
+                    }
+                    Change::Modified => {
+                        // variant was modified
+                        let old_variant_source = vd.old().unwrap().to_token_stream().to_string();
+                        let new_variant_source = vd.new().unwrap().to_token_stream().to_string();
+                        old_variants.push(format!("- {old_variant_source}",));
+                        new_variants.push(format!("+ {new_variant_source}",));
                     }
                 }
             }
 
-            left_column.push("\nfields:".to_string());
+            left_column.push("\nvariants:".to_string());
             right_column.push(String::new());
-            left_column.push(old_fields.join("\n"));
-            right_column.push(new_fields.join("\n"));
+            left_column.push(old_variants.join("\n"));
+            right_column.push(new_variants.join("\n"));
         }
 
         // old and new generics, if any

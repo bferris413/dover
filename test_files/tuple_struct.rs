@@ -1,7 +1,7 @@
 // use cake::cheese;
 
-enum TrafficLight {
-    Red,
+enum TrafficLight<T: Clone> {
+    Red { t: T },
     Yellow,
     Green,
 }
