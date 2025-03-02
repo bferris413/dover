@@ -13,10 +13,11 @@
   * (basically all of `sig`)
 - Identify trait pieces
 - Refactor old/new pattern to use single underlying type
-- enum declaration
 - enum impl
 - struct impl
+- struct fields assume order matters, but this is only relevant for tuple structs
 --------------------------------------------------------------------------------
+- done - enum declaration
 - done Generics in structs
   * done - type constraints
   * Defaults (?)
