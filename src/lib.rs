@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use overview::enums::{Enum, Enums, EnumsDiff};
+use overview::traits::{Trait, Traits};
 use quote::ToTokens;
 use syn::{File, Item, ItemFn};
 use syn::{ItemUse, Visibility};
@@ -61,6 +62,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
     let mut functions = Vec::new();
     let mut structs = Vec::new();
     let mut enums = Vec::new();
+    let mut traits = Vec::new();
 
     for item in file.items {
         match item {
@@ -76,9 +78,16 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
             Item::Enum(item_enum) => {
                 enums.push(item_enum);
             }
+            Item::Trait(item_trait) => {
+                traits.push(item_trait);
+            }
             _ => {}
         }
     }
+
+    let traits = traits.into_iter().map(Trait::from).collect();
+    let traits = Traits::from(traits);
+    dbg!(traits);
 
     let structs = structs.into_iter().map(Struct::from).collect();
     let structs = Structs::from(structs);

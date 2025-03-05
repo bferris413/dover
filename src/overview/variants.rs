@@ -2,9 +2,10 @@ use syn::Variant;
 
 use crate::{Change, Diff, ExistenceChange};
 
+trait Milkshake {}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Variants(Vec<Variant>);
-
 impl From<Vec<Variant>> for Variants {
     fn from(mut variants: Vec<Variant>) -> Self {
         variants.sort_by(|v1, v2| v1.ident.cmp(&v2.ident));

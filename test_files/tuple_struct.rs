@@ -1,10 +1,15 @@
 // use cake::cheese;
+//
 
-enum TrafficLight<T: Clone> {
-    Red { t: T },
-    Yellow,
-    Green,
+trait Milkshake {
+    fn cheese(&self) -> cheese::Cheese;
 }
+
+// enum L7Protocol<T: Clone> {
+//     Http { t: T },
+//     Https,
+//     STUN,
+// }
 
 // pub struct Thing<T, U, V: Clone, W, X>
 // where

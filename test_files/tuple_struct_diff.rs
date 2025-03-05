@@ -1,10 +1,12 @@
 // use cake::cheese::eggs;
 // use rice;
 
-enum TrafficLight {
-    Yellow,
-    Red,
-}
+// enum L7Protocol {
+//     Https,
+//     Dns,
+//     Smtp,
+// }
+
 // struct Thing<T, U>(T, U)
 // where
 //     U: Cake,

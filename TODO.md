@@ -1,6 +1,6 @@
 - Summary stats at top
-- Compare Imports between two commits.
-- Compare Imports between two branches.
+- Compare between two commits.
+- Compare between two branches.
 - Figure out sensible defaults for add/remove files
 - Identify freestanding function signature pieces
   * visibility
@@ -15,8 +15,10 @@
 - Refactor old/new pattern to use single underlying type
 - enum impl
 - struct impl
-- struct fields assume order matters, but this is only relevant for tuple structs
---------------------------------------------------------------------------------
+- trait impl
+-- BUG --------------------------------------------------------------------------
+- *bug* struct fields assume order matters, but this is only relevant for tuple structs
+-- DONE ------------------------------------------------------------------------
 - done - enum declaration
 - done Generics in structs
   * done - type constraints
