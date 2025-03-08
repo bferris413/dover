@@ -2,8 +2,6 @@ use syn::Variant;
 
 use crate::{Change, Diff, ExistenceChange};
 
-trait Milkshake {}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Variants(Vec<Variant>);
 impl From<Vec<Variant>> for Variants {

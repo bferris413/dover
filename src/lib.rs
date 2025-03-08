@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use overview::enums::{Enum, Enums, EnumsDiff};
-use overview::traits::{Trait, Traits};
+use overview::traits::{Trait, Traits, TraitsDiff};
 use quote::ToTokens;
 use syn::{File, Item, ItemFn};
 use syn::{ItemUse, Visibility};
@@ -87,7 +87,6 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
 
     let traits = traits.into_iter().map(Trait::from).collect();
     let traits = Traits::from(traits);
-    dbg!(traits);
 
     let structs = structs.into_iter().map(Struct::from).collect();
     let structs = Structs::from(structs);
@@ -116,6 +115,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
         uses: Uses::from(use_paths),
         structs,
         enums,
+        traits,
     };
     Ok(overview)
 }
@@ -126,6 +126,7 @@ pub struct Overview {
     uses: Uses,
     structs: Structs,
     enums: Enums,
+    traits: Traits,
 }
 impl Overview {
     pub fn uses(&self) -> &Uses {
@@ -184,6 +185,7 @@ impl Diff for Overview {
         let uses_diff = self.uses.diff_with(&other.uses);
         let structs_diff = self.structs.diff_with(&other.structs);
         let enums_diff = self.enums.diff_with(&other.enums);
+        let traits_diff = self.traits.diff_with(&other.traits);
         let file1 = self.path.clone();
         let file2 = other.path.clone();
 
@@ -193,6 +195,7 @@ impl Diff for Overview {
             uses_diff,
             structs_diff,
             enums_diff,
+            traits_diff,
         }
     }
 }
@@ -203,6 +206,7 @@ pub struct OverviewDiff {
     uses_diff: UsesDiff,
     structs_diff: StructsDiff,
     enums_diff: EnumsDiff,
+    traits_diff: TraitsDiff,
 }
 impl Display for OverviewDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -219,6 +223,9 @@ impl Display for OverviewDiff {
 
         writeln!(f, "{}", underlined("Enums"))?;
         writeln!(f, "{}", self.enums_diff)?;
+
+        writeln!(f, "{}", underlined("Traits"))?;
+        writeln!(f, "{}", self.traits_diff)?;
 
         Ok(())
     }
