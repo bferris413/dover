@@ -163,20 +163,165 @@ pub struct TraitDiff {
 }
 impl Display for TraitDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Change::*;
-        match self.change {
-            Existence(ExistenceChange::Added) => {
-                let source = crate::get_source(vec![Item::Trait(self.new.clone().unwrap())]);
-                writeln!(f, "+ {source}")
+        if let Change::Existence(ex) = self.change {
+            let t = match (&self.old, &self.new) {
+                (Some(_), Some(_)) => panic!("old and new traits were both Some"),
+                (None, None) => panic!("old and new traits were both None"),
+                (Some(t), None) | (None, Some(t)) => t,
+            };
+            let source = crate::get_source(vec![Item::Trait(t.clone())]);
+            return write!(f, "{ex} {source}");
+        }
+
+        let mut left_column = Vec::new();
+        let mut right_column = Vec::new();
+
+        // old and new trait declarations
+        let old = self.old.as_ref().unwrap();
+        let new = self.new.as_ref().unwrap();
+        let old_source = crate::get_source(vec![Item::Trait(old.clone())]);
+        let new_source = crate::get_source(vec![Item::Trait(new.clone())]);
+        left_column.push(old_source);
+        right_column.push(new_source);
+
+        // old and new visibility modifiers, if any
+        if let Some(vd) = &self.vis_diff {
+            left_column.push("\nvisibility:".to_string());
+            right_column.push(String::new());
+            left_column.push(format!("- {}", vd.old));
+            right_column.push(format!("+ {}", vd.new));
+        }
+
+        if let Some(items_diff) = &self.items_diff {
+            let mut old_items = Vec::new();
+            let mut new_items = Vec::new();
+
+            for item_diff in items_diff {
+                match item_diff.change {
+                    Change::Existence(ex) => {
+                        // item was added or deleted wholesale
+                        match ex {
+                            ExistenceChange::Deleted => {
+                                let item_source = item_diff
+                                    .old
+                                    .as_ref()
+                                    .unwrap()
+                                    .to_token_stream()
+                                    .to_string();
+                                old_items.push(format!("- {item_source}",))
+                            }
+                            ExistenceChange::Added => {
+                                let item_source = item_diff
+                                    .new
+                                    .as_ref()
+                                    .unwrap()
+                                    .to_token_stream()
+                                    .to_string();
+                                new_items.push(format!("+ {item_source}",))
+                            }
+                        }
+                    }
+                    Change::Modified => {
+                        // item was modified
+                        let old_item_source = item_diff
+                            .old
+                            .as_ref()
+                            .unwrap()
+                            .to_token_stream()
+                            .to_string();
+                        let new_item_source = item_diff
+                            .new
+                            .as_ref()
+                            .unwrap()
+                            .to_token_stream()
+                            .to_string();
+                        old_items.push(format!("- {old_item_source}",));
+                        new_items.push(format!("+ {new_item_source}",));
+                    }
+                }
             }
-            Existence(ExistenceChange::Deleted) => {
-                let source = crate::get_source(vec![Item::Trait(self.old.clone().unwrap())]);
-                writeln!(f, "- {source}")
+
+            left_column.push("\nitems:".to_string());
+            right_column.push(String::new());
+            left_column.push(old_items.join("\n"));
+            right_column.push(new_items.join("\n"));
+        }
+
+        // old and new generics, if any
+        if let Some(gd) = &self.generics_diff {
+            // generic param diff, if any
+            if let Some(pd) = gd.params_diff() {
+                let mut old_params = Vec::new();
+                let mut new_params = Vec::new();
+
+                for pd in pd.iter() {
+                    let param_source = pd.param().unwrap().to_token_stream().to_string();
+                    // let param_source = get_source(vec![Item::Verbatim(param_tokens)]);
+                    match pd.change() {
+                        ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
+                        ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
+                    }
+                }
+
+                left_column.push("\ngeneric parameters:".to_string());
+                right_column.push(String::new());
+                left_column.push(old_params.join("\n"));
+                right_column.push(new_params.join("\n"));
             }
-            Modified => {
-                todo!()
+
+            // where clause diff, if any
+            if let Some(wd) = gd.where_diff() {
+                left_column.push("\nwhere clause:".to_string());
+                right_column.push(String::new());
+                match wd.change() {
+                    Change::Existence(ex) => {
+                        // where clause was added or deleted wholesale
+                        let where_clause_source =
+                            wd.where_clause().unwrap().to_token_stream().to_string();
+                        // let where_clause_source = get_source(vec![Item::Verbatim(where_clause)]);
+                        match ex {
+                            ExistenceChange::Deleted => {
+                                left_column.push(format!("- {where_clause_source}"));
+                                right_column.push(String::new());
+                            }
+                            ExistenceChange::Added => {
+                                right_column.push(format!("+ {where_clause_source}"));
+                                left_column.push(String::new());
+                            }
+                        }
+                    }
+                    Change::Modified => {
+                        // where clause predicates were added or deleted
+                        let predicate_diffs = wd.predicates().unwrap();
+                        let mut old_predicates = Vec::new();
+                        let mut new_predicates = Vec::new();
+
+                        for pred_diff in predicate_diffs.iter() {
+                            let predicate_source =
+                                pred_diff.predicate().unwrap().to_token_stream().to_string();
+                            // let predicate_source =
+                            //     get_source(vec![Item::Verbatim(predicate_tokens)]);
+                            match pred_diff.change() {
+                                ExistenceChange::Deleted => {
+                                    old_predicates.push(format!("- {predicate_source}",))
+                                }
+                                ExistenceChange::Added => {
+                                    new_predicates.push(format!("+ {predicate_source}",))
+                                }
+                            }
+                        }
+
+                        left_column.push(old_predicates.join("\n"));
+                        right_column.push(new_predicates.join("\n"));
+                    }
+                }
             }
         }
+
+        // field diff, if any
+
+        let formatted_output = crate::format_as_columns(&left_column, &right_column);
+        writeln!(f, "{formatted_output}")
     }
 }
 

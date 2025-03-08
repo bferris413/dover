@@ -1,24 +1,20 @@
+-- TODO -------------------------------------------------------------------------
 - Summary stats at top
 - Compare between two commits.
 - Compare between two branches.
 - Figure out sensible defaults for add/remove files
 - Identify freestanding function signature pieces
-  * visibility
-  * args
-  * const
-  * name
-  * return type
-  * lifetime
-  * generics
-  * (basically all of `sig`)
-- Identify trait pieces
 - Refactor old/new pattern to use single underlying type
+- Freestanding functions
 - enum impl
 - struct impl
-- trait impl
+- "fragment" formatter
+
 -- BUG --------------------------------------------------------------------------
 - *bug* struct fields assume order matters, but this is only relevant for tuple structs
+
 -- DONE ------------------------------------------------------------------------
+- done- traits
 - done - enum declaration
 - done Generics in structs
   * done - type constraints
