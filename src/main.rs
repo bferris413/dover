@@ -18,8 +18,8 @@ enum Command {
 
 fn main() {
     let args = Cli::parse();
-    if args.command.is_some() {
-        run_command(args.command.unwrap());
+    if let Some(command) = args.command {
+        run_command(command);
         return;
     }
 

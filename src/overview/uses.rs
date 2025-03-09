@@ -76,6 +76,11 @@ impl Display for UseDiff {
 pub struct UsesDiff {
     diffs: Vec<UseDiff>,
 }
+impl UsesDiff {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.diffs.is_empty()
+    }
+}
 impl Display for UsesDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.diffs.is_empty() {

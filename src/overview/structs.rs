@@ -158,6 +158,11 @@ impl Display for Struct {
 pub struct StructsDiff {
     structs: Vec<StructDiff>,
 }
+impl StructsDiff {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.structs.is_empty()
+    }
+}
 impl Display for StructsDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.structs.is_empty() {

@@ -95,11 +95,11 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
     let enums = Enums::from(enums);
 
     // dbg!(&functions);
-    for func in functions.into_iter() {
-        let func_sig = func.sig.into_token_stream();
-        let func_str = func_sig.to_string();
-        println!("{func_str}");
-    }
+    // for func in functions.into_iter() {
+    //     let func_sig = func.sig.into_token_stream();
+    //     let func_str = func_sig.to_string();
+    //     println!("{func_str}");
+    // }
 
     let mut use_paths = Vec::new();
     for r#use in use_statements.iter() {
@@ -215,17 +215,25 @@ impl Display for OverviewDiff {
         let header = underlined(&format!("{fp1} -> {fp2}"));
         writeln!(f, "{header}")?;
 
-        writeln!(f, "{}", underlined("Use"))?;
-        writeln!(f, "{}", self.uses_diff)?;
+        if !self.uses_diff.is_empty() {
+            writeln!(f, "{}", underlined("Use"))?;
+            writeln!(f, "{}", self.uses_diff)?;
+        }
 
-        writeln!(f, "{}", underlined("Structs"))?;
-        writeln!(f, "{}", self.structs_diff)?;
+        if !self.structs_diff.is_empty() {
+            writeln!(f, "{}", underlined("Structs"))?;
+            writeln!(f, "{}", self.structs_diff)?;
+        }
 
-        writeln!(f, "{}", underlined("Enums"))?;
-        writeln!(f, "{}", self.enums_diff)?;
+        if !self.enums_diff.is_empty() {
+            writeln!(f, "{}", underlined("Enums"))?;
+            writeln!(f, "{}", self.enums_diff)?;
+        }
 
-        writeln!(f, "{}", underlined("Traits"))?;
-        writeln!(f, "{}", self.traits_diff)?;
+        if !self.traits_diff.is_empty() {
+            writeln!(f, "{}", underlined("Traits"))?;
+            writeln!(f, "{}", self.traits_diff)?;
+        }
 
         Ok(())
     }

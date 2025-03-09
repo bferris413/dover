@@ -158,6 +158,11 @@ impl Display for Enum {
 pub struct EnumsDiff {
     enums: Vec<EnumDiff>,
 }
+impl EnumsDiff {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.enums.is_empty()
+    }
+}
 impl Display for EnumsDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.enums.is_empty() {

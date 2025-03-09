@@ -143,6 +143,11 @@ impl From<ItemTrait> for Trait {
 pub struct TraitsDiff {
     diffs: Vec<TraitDiff>,
 }
+impl TraitsDiff {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.diffs.is_empty()
+    }
+}
 impl Display for TraitsDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for diff in &self.diffs {
