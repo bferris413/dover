@@ -16,19 +16,19 @@ impl Diff for Fields {
         let mut diffs = Vec::with_capacity(usize::max(self.0.len(), other.0.len()));
         loop {
             match (self.0.get(i), other.0.get(i)) {
-                (Some(s1), Some(s2)) => {
-                    diffs.push(s1.diff_with(s2));
+                (Some(f1), Some(f2)) => {
+                    diffs.push(f1.diff_with(f2));
                 }
-                (Some(s1), None) => {
+                (Some(f1), None) => {
                     diffs.push(Some(FieldDiff {
-                        old: Some(s1.clone()),
+                        old: Some(f1.clone()),
                         new: None,
                         change: Change::Existence(ExistenceChange::Deleted),
                     }));
                 }
-                (None, Some(s2)) => {
+                (None, Some(f2)) => {
                     diffs.push(Some(FieldDiff {
-                        new: Some(s2.clone()),
+                        new: Some(f2.clone()),
                         old: None,
                         change: Change::Existence(ExistenceChange::Added),
                     }));

@@ -18,8 +18,8 @@ pub struct Enums(pub Vec<Enum>);
 impl Enums {
     /// Creates a complete set of `enum` declarations from a list of `Enum`s.
     pub fn from(mut enums: Vec<Enum>) -> Self {
-        enums.sort_by(|s1, s2| s1.name().cmp(&s2.name()));
-        enums.dedup_by(|s1, s2| s1.name() == s2.name());
+        enums.sort_by(|e1, e2| e1.name().cmp(&e2.name()));
+        enums.dedup_by(|e1, e2| e1.name() == e2.name());
         Enums(enums)
     }
 }

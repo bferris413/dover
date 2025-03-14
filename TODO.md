@@ -9,6 +9,7 @@
 - enum impl
 - struct impl
 - "fragment" formatter
+- probably need to add attributes for all items
 
 -- BUG --------------------------------------------------------------------------
 - *bug* struct fields assume order matters, but this is only relevant for tuple structs

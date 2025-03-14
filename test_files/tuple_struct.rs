@@ -1,9 +1,12 @@
 // use cake::cheese;
-//
 
-trait Milkshake {
-    fn cheese(&self) -> cheese::Cheese;
+fn build(i: u32) -> u32 {
+    i
 }
+
+// trait Milkshake {
+//     fn cheese(&self) -> cheese::Cheese;
+// }
 
 // enum L7Protocol<T: Clone> {
 //     Http { t: T },

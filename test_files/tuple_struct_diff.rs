@@ -1,11 +1,11 @@
 // use cake::cheese::eggs;
 // use rice;
 
-trait Milkshake {
-    fn cheese(&self) -> eggs::Cheese;
-}
+// trait Milkshake {
+//     fn cheese(&self) -> eggs::Cheese;
+// }
 
-trait Rice {}
+// trait Rice {}
 
 // enum L7Protocol {
 //     Https,

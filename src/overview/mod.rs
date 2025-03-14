@@ -1,5 +1,6 @@
 pub mod enums;
 pub mod fields;
+pub mod functions;
 pub mod generics;
 pub mod structs;
 pub mod traits;

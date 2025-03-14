@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use overview::enums::{Enum, Enums, EnumsDiff};
+use overview::functions::{Functions, FunctionsDiff};
 use overview::traits::{Trait, Traits, TraitsDiff};
-use quote::ToTokens;
 use syn::{File, Item, ItemFn};
 use syn::{ItemUse, Visibility};
 
@@ -94,12 +94,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
     let enums = enums.into_iter().map(Enum::from).collect();
     let enums = Enums::from(enums);
 
-    // dbg!(&functions);
-    // for func in functions.into_iter() {
-    //     let func_sig = func.sig.into_token_stream();
-    //     let func_str = func_sig.to_string();
-    //     println!("{func_str}");
-    // }
+    let functions = Functions::from(functions);
 
     let mut use_paths = Vec::new();
     for r#use in use_statements.iter() {
@@ -116,6 +111,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
         structs,
         enums,
         traits,
+        functions,
     };
     Ok(overview)
 }
@@ -127,6 +123,7 @@ pub struct Overview {
     structs: Structs,
     enums: Enums,
     traits: Traits,
+    functions: Functions,
 }
 impl Overview {
     pub fn uses(&self) -> &Uses {
@@ -171,11 +168,6 @@ impl Display for Overview {
             }
         }
 
-        // writeln!(f, "\nFunctions:")?;
-        // for function in self.functions.iter() {
-        //     writeln!(f, "  {}", function.sig.ident)?;
-        // }
-
         Ok(())
     }
 }
@@ -186,6 +178,7 @@ impl Diff for Overview {
         let structs_diff = self.structs.diff_with(&other.structs);
         let enums_diff = self.enums.diff_with(&other.enums);
         let traits_diff = self.traits.diff_with(&other.traits);
+        let functions_diff = self.functions.diff_with(&other.functions);
         let file1 = self.path.clone();
         let file2 = other.path.clone();
 
@@ -196,6 +189,7 @@ impl Diff for Overview {
             structs_diff,
             enums_diff,
             traits_diff,
+            functions_diff,
         }
     }
 }
@@ -207,6 +201,7 @@ pub struct OverviewDiff {
     structs_diff: StructsDiff,
     enums_diff: EnumsDiff,
     traits_diff: TraitsDiff,
+    functions_diff: FunctionsDiff,
 }
 impl Display for OverviewDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
