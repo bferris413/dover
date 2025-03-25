@@ -23,8 +23,9 @@ pub trait Diff {
     fn diff_with(&self, other: &Self) -> Self::Diff;
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum Change {
+    #[default]
     Modified,
     Existence(ExistenceChange),
 }
@@ -228,6 +229,11 @@ impl Display for OverviewDiff {
         if !self.traits_diff.is_empty() {
             writeln!(f, "{}", underlined("Traits"))?;
             writeln!(f, "{}", self.traits_diff)?;
+        }
+
+        if !self.functions_diff.is_empty() {
+            writeln!(f, "{}", underlined("Functions"))?;
+            writeln!(f, "{}", self.functions_diff)?;
         }
 
         Ok(())

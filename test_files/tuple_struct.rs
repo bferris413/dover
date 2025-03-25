@@ -1,6 +1,6 @@
 // use cake::cheese;
 
-fn build(i: u32) -> u32 {
+pub fn build<T: Clone>(i: u32, y: T) -> T {
     i
 }
 
