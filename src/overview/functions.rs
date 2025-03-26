@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 use quote::ToTokens;
 use syn::{
@@ -6,7 +6,7 @@ use syn::{
     Abi, FnArg, Item, ItemFn, ReturnType,
 };
 
-use crate::{Change, Diff, ExistenceChange, Vis, VisDiff};
+use crate::{get_source, Change, Diff, ExistenceChange, Vis, VisDiff};
 
 use super::generics::{Generics, GenericsDiff};
 
@@ -15,6 +15,14 @@ use super::generics::{Generics, GenericsDiff};
 /// The internal representation is sorted and deduped.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Functions(Vec<Function>);
+impl Functions {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn functions(&self) -> &[Function] {
+        &self.0
+    }
+}
 impl From<Vec<ItemFn>> for Functions {
     /// Creates a complete set of freestanding `Function` declarations from a list of `syn::ItemFn`.
     fn from(fns: Vec<ItemFn>) -> Self {
@@ -92,6 +100,12 @@ pub struct Function {
 impl Function {
     pub fn name(&self) -> &str {
         &self.name
+    }
+}
+impl Display for Function {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let source = remove_block(get_source(vec![Item::Fn(self.original_fn.clone())]));
+        write!(f, "{source}")
     }
 }
 impl From<ItemFn> for Function {
@@ -184,9 +198,7 @@ impl Display for FunctionDiff {
                 (Some(s), None) | (None, Some(s)) => s,
             };
 
-            let source = crate::get_source(vec![Item::Fn(func.original_fn.clone())]);
-            let source_without_block = remove_block(source);
-            return write!(f, "{ex} {source_without_block}");
+            return write!(f, "{ex} {func}");
         }
 
         let mut left_column = Vec::new();
@@ -195,8 +207,8 @@ impl Display for FunctionDiff {
         // old and new function declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
-        let old_source = remove_block(crate::get_source(vec![Item::Fn(old.original_fn.clone())]));
-        let new_source = remove_block(crate::get_source(vec![Item::Fn(new.original_fn.clone())]));
+        let old_source = format!("{old}");
+        let new_source = format!("{new}");
         left_column.push(old_source);
         right_column.push(new_source);
 

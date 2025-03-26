@@ -3,7 +3,7 @@ use std::{fmt::Display, ops::Deref};
 use quote::ToTokens;
 use syn::{Item, ItemTrait, TraitItem};
 
-use crate::{Change, Diff, ExistenceChange, Vis, VisDiff};
+use crate::{get_source, Change, Diff, ExistenceChange, Vis, VisDiff};
 
 use super::generics::{Generics, GenericsDiff};
 
@@ -91,6 +91,12 @@ pub struct Trait {
 impl Trait {
     pub fn name(&self) -> &str {
         &self.name
+    }
+}
+impl Display for Trait {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let source = get_source(vec![Item::Trait(self.original.clone())]);
+        write!(f, "{}", source)
     }
 }
 impl Diff for Trait {

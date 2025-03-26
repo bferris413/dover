@@ -169,6 +169,33 @@ impl Display for Overview {
             }
         }
 
+        writeln!(f, "\nEnums:")?;
+        if self.enums.is_empty() {
+            writeln!(f, "  (none)")?;
+        } else {
+            for en in self.enums.iter() {
+                writeln!(f, "  {en}")?;
+            }
+        }
+
+        writeln!(f, "\nTraits:")?;
+        if self.traits.is_empty() {
+            writeln!(f, "  (none)")?;
+        } else {
+            for tr in self.traits.iter() {
+                writeln!(f, "  {tr}")?;
+            }
+        }
+
+        writeln!(f, "\nFunctions:")?;
+        if self.functions.is_empty() {
+            writeln!(f, "  (none)")?;
+        } else {
+            for func in self.functions.functions().iter() {
+                writeln!(f, "  {func}")?;
+            }
+        }
+
         Ok(())
     }
 }
