@@ -5,19 +5,20 @@
 - Figure out sensible defaults for add/remove files
 - Identify freestanding function signature pieces
 - Refactor old/new pattern to use single underlying type
-- Freestanding functions
-- enum impl
 - struct impl
+- trait impl
 - "fragment" formatter
 - probably need to add attributes for all items
+- enum impl
 
 -- BUG --------------------------------------------------------------------------
 - *bug* struct fields assume order matters, but this is only relevant for tuple structs
 
 -- DONE ------------------------------------------------------------------------
-- done- traits
+- done - Freestanding functions
+- done - traits
 - done - enum declaration
-- done Generics in structs
+- done - Generics in structs
   * done - type constraints
   * Defaults (?)
 - done - Generics in structs (lifetime params)
@@ -26,6 +27,7 @@
   * done - Inline types
   * done - Where clauses
 - done - struct field
+
 - done - Tuple structs
   * vis
   * fields
