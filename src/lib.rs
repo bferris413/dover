@@ -151,46 +151,36 @@ impl Display for Overview {
         let formatted_path = formatted_path(&self.path);
         writeln!(f, "{formatted_path}")?;
 
-        writeln!(f, "Imports:")?;
-        if self.uses.0.is_empty() {
-            writeln!(f, "  (none)")?;
-        } else {
+        if !self.uses.0.is_empty() {
+            writeln!(f, "Imports:")?;
             for import in self.uses.0.iter() {
                 writeln!(f, "  {import}")?;
             }
         }
 
-        writeln!(f, "\nStructs:")?;
-        if self.structs.is_empty() {
-            writeln!(f, "  (none)")?;
-        } else {
+        if !self.structs.is_empty() {
+            writeln!(f, "\nStructs:")?;
             for st in self.structs.iter() {
                 writeln!(f, "  {st}")?;
             }
         }
 
-        writeln!(f, "\nEnums:")?;
-        if self.enums.is_empty() {
-            writeln!(f, "  (none)")?;
-        } else {
+        if !self.enums.is_empty() {
+            writeln!(f, "\nEnums:")?;
             for en in self.enums.iter() {
                 writeln!(f, "  {en}")?;
             }
         }
 
-        writeln!(f, "\nTraits:")?;
-        if self.traits.is_empty() {
-            writeln!(f, "  (none)")?;
-        } else {
+        if !self.traits.is_empty() {
+            writeln!(f, "\nTraits:")?;
             for tr in self.traits.iter() {
                 writeln!(f, "  {tr}")?;
             }
         }
 
-        writeln!(f, "\nFunctions:")?;
-        if self.functions.is_empty() {
-            writeln!(f, "  (none)")?;
-        } else {
+        if !self.functions.is_empty() {
+            writeln!(f, "\nFunctions:")?;
             for func in self.functions.functions().iter() {
                 writeln!(f, "  {func}")?;
             }
