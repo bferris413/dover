@@ -185,7 +185,8 @@ impl Display for FunctionDiff {
             };
 
             let source = crate::get_source(vec![Item::Fn(func.original_fn.clone())]);
-            return write!(f, "{ex} {source}");
+            let source_without_block = remove_block(source);
+            return write!(f, "{ex} {source_without_block}");
         }
 
         let mut left_column = Vec::new();
@@ -194,8 +195,8 @@ impl Display for FunctionDiff {
         // old and new function declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
-        let old_source = crate::get_source(vec![Item::Fn(old.original_fn.clone())]);
-        let new_source = crate::get_source(vec![Item::Fn(new.original_fn.clone())]);
+        let old_source = remove_block(crate::get_source(vec![Item::Fn(old.original_fn.clone())]));
+        let new_source = remove_block(crate::get_source(vec![Item::Fn(new.original_fn.clone())]));
         left_column.push(old_source);
         right_column.push(new_source);
 
@@ -357,6 +358,19 @@ impl Display for FunctionDiff {
 
         let formatted_output = crate::format_as_columns(&left_column, &right_column);
         writeln!(f, "{formatted_output}")
+    }
+}
+
+fn remove_block(mut source: String) -> String {
+    let block_start = source.find("{");
+    let block_end = source.rfind("}");
+
+    if let (Some(start), Some(_)) = (block_start, block_end) {
+        source.truncate(start);
+        source
+    } else {
+        eprintln!("unexpected function without block");
+        source
     }
 }
 
