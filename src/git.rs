@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use git2::{Delta, Oid, Repository};
 use std::{fmt::Display, fs, path::PathBuf};
 
@@ -41,7 +41,11 @@ impl Display for ChangedFile {
 
 /// Get a list of changed files in the Git repository at `repo_path`.
 pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
-    let repo = Repository::open(repo_path).context("Failed to open Git repository")?;
+    let repo = Repository::discover(&repo_path).context("Failed to open Git repository")?;
+    let Some(repo_path) = repo.workdir() else {
+        bail!("Couldn't get workdir from {}", repo_path.display());
+    };
+
     let diff = repo
         .diff_index_to_workdir(None, None)
         .context("Failed to get diff from index to workdir")?;
@@ -67,7 +71,9 @@ pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
                         return true;
                     };
 
-                    let contents = match fs::read_to_string(path) {
+                    let full_path = repo_path.join(path);
+
+                    let contents = match fs::read_to_string(full_path) {
                         Ok(contents) => contents,
                         Err(e) => {
                             eprintln!("Couldn't read {}: {e}", path.display());
@@ -99,10 +105,11 @@ pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
                     // old file is in the index, new file is in the workdir,
                     // according to Repository::diff_index_to_workdir docs
                     let before_contents = get_blob_contents(&repo, &old_oid).unwrap();
-                    let after_contents = match fs::read_to_string(new_path) {
+                    let new_full_path = repo_path.join(new_path);
+                    let after_contents = match fs::read_to_string(&new_full_path) {
                         Ok(contents) => contents,
                         Err(e) => {
-                            eprintln!("Couldn't read {}: {e}", new_path.display());
+                            eprintln!("Couldn't read {}: {e}", new_full_path.display());
                             return true;
                         }
                     };
@@ -111,7 +118,7 @@ pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
                     assert_eq!(new_path, old_path);
                     let change = ChangedFile {
                         // assumes the above assert holds
-                        path: new_path.to_path_buf(),
+                        path: new_full_path,
                         change_type: Change::Modified {
                             before_contents,
                             after_contents,

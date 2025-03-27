@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -154,35 +154,35 @@ impl Display for Overview {
         if !self.uses.0.is_empty() {
             writeln!(f, "Imports:")?;
             for import in self.uses.0.iter() {
-                writeln!(f, "  {import}")?;
+                writeln!(f, "{import}")?;
             }
         }
 
         if !self.structs.is_empty() {
             writeln!(f, "\nStructs:")?;
             for st in self.structs.iter() {
-                writeln!(f, "  {st}")?;
+                writeln!(f, "{st}")?;
             }
         }
 
         if !self.enums.is_empty() {
             writeln!(f, "\nEnums:")?;
             for en in self.enums.iter() {
-                writeln!(f, "  {en}")?;
+                writeln!(f, "{en}")?;
             }
         }
 
         if !self.traits.is_empty() {
             writeln!(f, "\nTraits:")?;
             for tr in self.traits.iter() {
-                writeln!(f, "  {tr}")?;
+                writeln!(f, "{tr}")?;
             }
         }
 
         if !self.functions.is_empty() {
             writeln!(f, "\nFunctions:")?;
             for func in self.functions.functions().iter() {
-                writeln!(f, "  {func}")?;
+                writeln!(f, "{func}")?;
             }
         }
 
@@ -221,39 +221,57 @@ pub struct OverviewDiff {
     traits_diff: TraitsDiff,
     functions_diff: FunctionsDiff,
 }
+impl OverviewDiff {
+    pub fn all_empty(&self) -> bool {
+        self.uses_diff.is_empty()
+            && self.structs_diff.is_empty()
+            && self.enums_diff.is_empty()
+            && self.traits_diff.is_empty()
+            && self.functions_diff.is_empty()
+    }
+}
 impl Display for OverviewDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.all_empty() {
+            return Ok(());
+        }
+
         let fp1 = &self.file1.to_str().unwrap();
         let fp2 = &self.file2.to_str().unwrap();
         let header = underlined(&format!("{fp1} -> {fp2}"));
-        writeln!(f, "{header}")?;
+        let mut string_builder = String::new();
+        writeln!(&mut string_builder, "{header}")?;
 
         if !self.uses_diff.is_empty() {
-            writeln!(f, "{}", underlined("Use"))?;
-            writeln!(f, "{}", self.uses_diff)?;
+            writeln!(&mut string_builder, "{}", underlined("Use"))?;
+            writeln!(&mut string_builder, "{}", self.uses_diff)?;
         }
 
         if !self.structs_diff.is_empty() {
-            writeln!(f, "{}", underlined("Structs"))?;
-            writeln!(f, "{}", self.structs_diff)?;
+            writeln!(&mut string_builder, "{}", underlined("Structs"))?;
+            writeln!(&mut string_builder, "{}", self.structs_diff)?;
         }
 
         if !self.enums_diff.is_empty() {
-            writeln!(f, "{}", underlined("Enums"))?;
-            writeln!(f, "{}", self.enums_diff)?;
+            writeln!(&mut string_builder, "{}", underlined("Enums"))?;
+            writeln!(&mut string_builder, "{}", self.enums_diff)?;
         }
 
         if !self.traits_diff.is_empty() {
-            writeln!(f, "{}", underlined("Traits"))?;
-            writeln!(f, "{}", self.traits_diff)?;
+            writeln!(&mut string_builder, "{}", underlined("Traits"))?;
+            writeln!(&mut string_builder, "{}", self.traits_diff)?;
         }
 
         if !self.functions_diff.is_empty() {
-            writeln!(f, "{}", underlined("Functions"))?;
-            writeln!(f, "{}", self.functions_diff)?;
+            writeln!(&mut string_builder, "{}", underlined("Functions"))?;
+            writeln!(&mut string_builder, "{}", self.functions_diff)?;
         }
 
-        Ok(())
+        while string_builder.ends_with('\n') {
+            string_builder.pop().unwrap();
+        }
+
+        write!(f, "{string_builder}")
     }
 }
 
@@ -297,6 +315,7 @@ fn format_as_columns(left: &Vec<String>, right: &Vec<String>) -> String {
     let left_right = left.iter().zip(right.iter());
     let mut formatted_output = String::new();
 
+    let mut should_pop_newline = false;
     for (left, right) in left_right {
         let mut left_lines = left.lines().collect::<Vec<_>>();
         let mut right_lines = right.lines().collect::<Vec<_>>();
@@ -318,7 +337,12 @@ fn format_as_columns(left: &Vec<String>, right: &Vec<String>) -> String {
                 width = max_width
             ));
             formatted_output.push('\n');
+            should_pop_newline = true;
         }
+    }
+
+    if should_pop_newline {
+        formatted_output.pop(); // removed extra newline
     }
 
     formatted_output

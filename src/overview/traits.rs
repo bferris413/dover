@@ -332,7 +332,7 @@ impl Display for TraitDiff {
         // field diff, if any
 
         let formatted_output = crate::format_as_columns(&left_column, &right_column);
-        writeln!(f, "{formatted_output}")
+        write!(f, "{formatted_output}")
     }
 }
 

@@ -331,6 +331,6 @@ impl Display for EnumDiff {
         }
 
         let formatted_output = format_as_columns(&left_column, &right_column);
-        writeln!(f, "{formatted_output}")
+        write!(f, "{formatted_output}")
     }
 }
