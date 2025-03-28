@@ -8,20 +8,37 @@ use dover::{Diff, GitChange, Overview};
 #[command(author, version, about = "Diff OVERview")]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Command>,
+    command: Command,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    Files { file1: PathBuf, file2: PathBuf },
-    Overview { files: Vec<PathBuf> },
+    Diff {
+        commit1: Option<String>,
+        commit2: Option<String>,
+    },
+    Files {
+        file1: PathBuf,
+        file2: PathBuf,
+    },
+    Overview {
+        files: Vec<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
     let args = Cli::parse();
-    if let Some(command) = args.command {
-        return run_command(command);
+    match args.command {
+        Command::Diff { commit1, commit2 } => run_diff(Command::Diff { commit1, commit2 }),
+        Command::Files { file1, file2 } => run_files(Command::Files { file1, file2 }),
+        Command::Overview { files } => run_overview(Command::Overview { files }),
     }
+}
+
+fn run_diff(command: Command) -> Result<()> {
+    let Command::Diff { commit1, commit2 } = command else {
+        unreachable!();
+    };
 
     let changes = dover::get_changed_files(PathBuf::from("."))?
         .into_iter()
@@ -60,21 +77,26 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_command(c: Command) -> Result<()> {
-    match c {
-        Command::Files { file1, file2 } => {
-            let overview1 =
-                Overview::try_from(file1).context("Error getting overview for file1")?;
-            let overview2 =
-                Overview::try_from(file2).context("Error getting overview for file2")?;
-            println!("{}", overview1.diff_with(&overview2));
-        }
-        Command::Overview { files } => {
-            for file in files {
-                let overview = Overview::try_from(file).context("Error getting overview")?;
-                println!("{overview}");
-            }
-        }
+fn run_files(c: Command) -> Result<()> {
+    let Command::Files { file1, file2 } = c else {
+        unreachable!();
+    };
+
+    let overview1 = Overview::try_from(file1).context("Error getting overview for file1")?;
+    let overview2 = Overview::try_from(file2).context("Error getting overview for file2")?;
+    println!("{}", overview1.diff_with(&overview2));
+
+    Ok(())
+}
+
+fn run_overview(c: Command) -> Result<()> {
+    let Command::Overview { files } = c else {
+        unreachable!();
+    };
+
+    for file in files {
+        let overview = Overview::try_from(file).context("Error getting overview")?;
+        println!("{overview}");
     }
 
     Ok(())
