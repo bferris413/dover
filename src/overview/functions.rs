@@ -1,4 +1,6 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{
+    Formatter, {Display, Write},
+};
 
 use quote::ToTokens;
 use syn::{
@@ -192,13 +194,13 @@ pub struct FunctionDiff {
 impl Display for FunctionDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Change::Existence(ex) = self.change {
-            let func = match (&self.old, &self.new) {
+            match (&self.old, &self.new) {
                 (Some(_), Some(_)) => panic!("old and new functions were both Some"),
                 (None, None) => panic!("old and new functions were both None"),
-                (Some(s), None) | (None, Some(s)) => s,
+                (Some(s), None) | (None, Some(s)) => {
+                    return write!(f, "{ex} {s}");
+                }
             };
-
-            return write!(f, "{ex} {func}");
         }
 
         let mut left_column = Vec::new();
@@ -480,7 +482,38 @@ impl Display for FunctionsDiff {
             return writeln!(f, "(no changes)");
         }
 
-        for diff in self.diffs.iter() {
+        let ex_diffs = self
+            .diffs
+            .iter()
+            .filter(|diff| matches!(diff.change, Change::Existence(_)));
+
+        let (mut left_col, mut right_col) = (String::new(), String::new());
+        let mut any_ex_diffs = false;
+        for diff in ex_diffs {
+            any_ex_diffs = true;
+            match diff.change {
+                Change::Existence(ExistenceChange::Added) => {
+                    write!(right_col, "{diff}")?;
+                }
+                Change::Existence(ExistenceChange::Deleted) => {
+                    write!(left_col, "{diff}")?;
+                }
+                _ => {
+                    unreachable!()
+                }
+            }
+        }
+        if any_ex_diffs {
+            let output = crate::format_as_columns(&vec![left_col], &vec![right_col]);
+            writeln!(f, "{output}")?;
+        }
+
+        let mod_diffs = self
+            .diffs
+            .iter()
+            .filter(|diff| matches!(diff.change, Change::Modified));
+
+        for diff in mod_diffs {
             writeln!(f, "{diff}")?;
         }
 

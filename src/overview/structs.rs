@@ -1,4 +1,7 @@
-use std::{fmt::Display, ops::Deref};
+use std::{
+    fmt::{Display, Write},
+    ops::Deref,
+};
 
 use quote::ToTokens;
 use syn::{Item, ItemStruct};
@@ -169,7 +172,38 @@ impl Display for StructsDiff {
             return writeln!(f, "(no changes)");
         }
 
-        for diff in self.structs.iter() {
+        let ex_diffs = self
+            .structs
+            .iter()
+            .filter(|diff| matches!(diff.change, Change::Existence(_)));
+
+        let (mut left_col, mut right_col) = (String::new(), String::new());
+        let mut any_ex_diffs = false;
+        for diff in ex_diffs {
+            any_ex_diffs = true;
+            match diff.change {
+                Change::Existence(ExistenceChange::Added) => {
+                    write!(right_col, "{diff}")?;
+                }
+                Change::Existence(ExistenceChange::Deleted) => {
+                    write!(left_col, "{diff}")?;
+                }
+                _ => {
+                    unreachable!()
+                }
+            }
+        }
+        if any_ex_diffs {
+            let output = crate::format_as_columns(&vec![left_col], &vec![right_col]);
+            writeln!(f, "{output}")?;
+        }
+
+        let mod_diffs = self
+            .structs
+            .iter()
+            .filter(|diff| matches!(diff.change, Change::Modified));
+
+        for diff in mod_diffs {
             writeln!(f, "{diff}")?;
         }
 

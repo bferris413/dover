@@ -1,9 +1,12 @@
 // use cake::cheese::eggs;
 // use rice;
 
-const unsafe fn build(i: u32) -> std::u32::u32 {
+const unsafe fn run(i: u32) -> std::u32::u32 {
     i
 }
+
+struct Struct2;
+//struct Struct3;
 
 // trait Milkshake {
 //     fn cheese(&self) -> eggs::Cheese;

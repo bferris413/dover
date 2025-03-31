@@ -1,5 +1,8 @@
 use crate::{Diff, ExistenceChange};
-use std::{fmt::Display, ops::Deref};
+use std::{
+    fmt::{Display, Write},
+    ops::Deref,
+};
 use syn::UseTree;
 
 /// A collection of `use` statements.
@@ -87,8 +90,22 @@ impl Display for UsesDiff {
             return writeln!(f, "(no changes)");
         }
 
+        let (mut left_col, mut right_col) = (String::new(), String::new());
+        let mut any_ex_diffs = false;
         for diff in self.diffs.iter() {
-            writeln!(f, "{diff}")?;
+            any_ex_diffs = true;
+            match diff.change {
+                ExistenceChange::Added => {
+                    write!(right_col, "{diff}")?;
+                }
+                ExistenceChange::Deleted => {
+                    write!(left_col, "{diff}")?;
+                }
+            }
+        }
+        if any_ex_diffs {
+            let output = crate::format_as_columns(&vec![left_col], &vec![right_col]);
+            writeln!(f, "{output}")?;
         }
 
         Ok(())

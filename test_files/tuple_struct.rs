@@ -14,6 +14,9 @@ pub fn build<T: Clone>(i: u32, y: T) -> T {
 //     STUN,
 // }
 
+struct Struct;
+struct Struct1;
+
 // pub struct Thing<T, U, V: Clone, W, X>
 // where
 //     X: Cake,
