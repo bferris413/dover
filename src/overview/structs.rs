@@ -243,8 +243,16 @@ impl Display for StructDiff {
         // old and new struct declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
-        let old_source = crate::get_source(vec![Item::Struct(old.clone())]);
-        let new_source = crate::get_source(vec![Item::Struct(new.clone())]);
+        let old_source = crate::get_source(vec![Item::Struct(old.clone())])
+            .lines()
+            .map(|line| format!("~ {line}"))
+            .collect::<Vec<String>>()
+            .join("\n");
+        let new_source = crate::get_source(vec![Item::Struct(new.clone())])
+            .lines()
+            .map(|line| format!("~ {line}"))
+            .collect::<Vec<String>>()
+            .join("\n");
         left_column.push(old_source);
         right_column.push(new_source);
 

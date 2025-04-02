@@ -243,8 +243,16 @@ impl Display for EnumDiff {
         // old and new neum declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
-        let old_source = get_source(vec![Item::Enum(old.clone())]);
-        let new_source = get_source(vec![Item::Enum(new.clone())]);
+        let old_source = get_source(vec![Item::Enum(old.clone())])
+            .lines()
+            .map(|line| format!("~ {line}"))
+            .collect::<Vec<String>>()
+            .join("\n");
+        let new_source = get_source(vec![Item::Enum(new.clone())])
+            .lines()
+            .map(|line| format!("~ {line}"))
+            .collect::<Vec<String>>()
+            .join("\n");
         left_column.push(old_source);
         right_column.push(new_source);
 

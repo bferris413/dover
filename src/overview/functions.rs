@@ -209,8 +209,16 @@ impl Display for FunctionDiff {
         // old and new function declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
-        let old_source = format!("{old}");
-        let new_source = format!("{new}");
+        let old_source = format!("{old}")
+            .lines()
+            .map(|line| format!("~ {line}"))
+            .collect::<Vec<String>>()
+            .join("\n");
+        let new_source = format!("{new}")
+            .lines()
+            .map(|line| format!("~ {line}"))
+            .collect::<Vec<String>>()
+            .join("\n");
         left_column.push(old_source);
         right_column.push(new_source);
 
