@@ -15,7 +15,7 @@ use overview::uses::{self, Uses, UsesDiff};
 mod git;
 mod overview;
 
-pub use git::{get_changed_files, Change as GitChange, ChangedFile};
+pub use git::{get_changed_files, Change as GitChange, ChangedFile, Treeish};
 
 /// Diff an item with another and return the result.
 pub trait Diff {

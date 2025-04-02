@@ -39,16 +39,61 @@ impl Display for ChangedFile {
     }
 }
 
+pub struct Treeish {
+    commit1: String,
+    commit2: Option<String>,
+}
+impl Treeish {
+    pub fn new(commit1: String, commit2: Option<String>) -> Self {
+        Treeish { commit1, commit2 }
+    }
+}
+
 /// Get a list of changed files in the Git repository at `repo_path`.
-pub fn get_changed_files(repo_path: PathBuf) -> Result<Vec<ChangedFile>> {
+pub fn get_changed_files(
+    repo_path: PathBuf,
+    trees_to_diff: Option<Treeish>,
+) -> Result<Vec<ChangedFile>> {
     let repo = Repository::discover(&repo_path).context("Failed to open Git repository")?;
     let Some(repo_path) = repo.workdir() else {
         bail!("Couldn't get workdir from {}", repo_path.display());
     };
 
-    let diff = repo
-        .diff_index_to_workdir(None, None)
-        .context("Failed to get diff from index to workdir")?;
+    let diff = match trees_to_diff {
+        // emulates `git diff`
+        None => repo
+            .diff_index_to_workdir(None, None)
+            .context("Couldn't get diff from index to workdir")?,
+        Some(Treeish { commit1, commit2 }) => {
+            let (c1_tree, c2_tree) = {
+                // we need to find the tree associated with each commit
+                let c1_oid = Oid::from_str(&commit1).context("Couldn't parse commit1 OID")?;
+                let c2_oid =
+                    commit2.map(|oid| Oid::from_str(&oid).context("Couldn't parse commit2 OID"));
+
+                let c2_oid = match c2_oid {
+                    Some(Err(e)) => bail!("Couldn't parse commit2 OID: {}", e),
+                    Some(Ok(oid)) => Some(oid),
+                    None => None,
+                };
+                let c1_tree = repo.find_tree(c1_oid)?;
+                let c2_tree = c2_oid.map(|oid| repo.find_tree(oid));
+
+                if let Some(Err(e)) = c2_tree {
+                    bail!("Couldn't find tree for commit2: {}", e);
+                }
+                let c2_tree = c2_tree.map(|tree| tree.unwrap());
+
+                (c1_tree, c2_tree)
+            };
+            match c2_tree {
+                Some(_) => repo
+                    .diff_tree_to_tree(Some(&c1_tree), c2_tree.as_ref(), None)
+                    .context("Couldn't get diff from {commit1}")?,
+                None => repo.diff_tree_to_workdir(Some(&c1_tree), None)?,
+            }
+        }
+    };
 
     // let head = repo.head().context("Failed to get HEAD")?;
     // let head_commit = head.peel_to_commit().context("Failed to get HEAD commit")?;
@@ -174,7 +219,7 @@ mod tests {
     #[test]
     fn test_get_changed_files() {
         let repo_path = PathBuf::from(".");
-        let changed_files = get_changed_files(repo_path).unwrap();
+        let changed_files = get_changed_files(repo_path, None, None).unwrap();
         for file in changed_files {
             println!("{file}");
         }

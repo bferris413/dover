@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use dover::{Diff, GitChange, Overview};
+use dover::{Diff, GitChange, Overview, Treeish};
 
 #[derive(Parser)]
 #[command(author, version, about = "Diff OVERview")]
@@ -40,7 +40,12 @@ fn run_diff(command: Command) -> Result<()> {
         unreachable!();
     };
 
-    let changes = dover::get_changed_files(PathBuf::from("."))?
+    let trees = commit1.map(|c1| {
+        let treeish = Treeish::new(c1, commit2);
+        treeish
+    });
+
+    let changes = dover::get_changed_files(PathBuf::from("."), trees)?
         .into_iter()
         .filter(|c| c.path.extension().map_or(false, |ext| ext == "rs"));
 
