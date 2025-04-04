@@ -14,6 +14,11 @@ struct Struct1 {
     field1: u32,
     field2: String,
 }
+impl Struct1 {
+    fn new(field1: u32, field2: String) -> Self {
+        Self { field1, field2 }
+    }
+}
 //struct Struct3;
 
 // trait Milkshake {

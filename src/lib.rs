@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use overview::enums::{Enum, Enums, EnumsDiff};
 use overview::functions::{Functions, FunctionsDiff};
+use overview::impls::{Impls, ImplsDiff};
 use overview::traits::{Trait, Traits, TraitsDiff};
 use syn::{File, Item, ItemFn};
 use syn::{ItemUse, Visibility};
@@ -64,6 +65,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
     let mut structs = Vec::new();
     let mut enums = Vec::new();
     let mut traits = Vec::new();
+    let mut impls = Vec::new();
 
     for item in file.items {
         match item {
@@ -82,6 +84,9 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
             Item::Trait(item_trait) => {
                 traits.push(item_trait);
             }
+            Item::Impl(item_impl) => {
+                impls.push(dbg!(item_impl));
+            }
             _ => {}
         }
     }
@@ -96,6 +101,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
     let enums = Enums::from(enums);
 
     let functions = Functions::from(functions);
+    let impls = Impls::from(impls);
 
     let mut use_paths = Vec::new();
     for r#use in use_statements.iter() {
@@ -113,6 +119,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
         enums,
         traits,
         functions,
+        impls,
     };
     Ok(overview)
 }
@@ -125,6 +132,7 @@ pub struct Overview {
     enums: Enums,
     traits: Traits,
     functions: Functions,
+    impls: Impls,
 }
 impl Overview {
     pub fn uses(&self) -> &Uses {
@@ -186,6 +194,13 @@ impl Display for Overview {
             }
         }
 
+        if !self.impls.is_empty() {
+            writeln!(f, "\nImpls:")?;
+            for imp in self.impls.impls().iter() {
+                writeln!(f, "{imp}")?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -197,6 +212,7 @@ impl Diff for Overview {
         let enums_diff = self.enums.diff_with(&other.enums);
         let traits_diff = self.traits.diff_with(&other.traits);
         let functions_diff = self.functions.diff_with(&other.functions);
+        let impls_diff = self.impls.diff_with(&other.impls);
         let file1 = self.path.clone();
         let file2 = other.path.clone();
 
@@ -208,6 +224,7 @@ impl Diff for Overview {
             enums_diff,
             traits_diff,
             functions_diff,
+            impls_diff,
         }
     }
 }
@@ -220,6 +237,7 @@ pub struct OverviewDiff {
     enums_diff: EnumsDiff,
     traits_diff: TraitsDiff,
     functions_diff: FunctionsDiff,
+    impls_diff: ImplsDiff,
 }
 impl OverviewDiff {
     pub fn all_empty(&self) -> bool {
@@ -228,6 +246,7 @@ impl OverviewDiff {
             && self.enums_diff.is_empty()
             && self.traits_diff.is_empty()
             && self.functions_diff.is_empty()
+            && self.impls_diff.is_empty()
     }
 }
 impl Display for OverviewDiff {

@@ -1,6 +1,5 @@
 -- TODO -------------------------------------------------------------------------
 - Summary stats at top
-- Compare between two commits.
 - Compare between two branches.
 - Figure out sensible defaults for add/remove files
 - Identify freestanding function signature pieces
@@ -10,11 +9,13 @@
 - "fragment" formatter
 - probably need to add attributes for all items
 - enum impl
+- colored output
 
 -- BUG --------------------------------------------------------------------------
-- *bug* struct fields assume order matters, but this is only relevant for tuple structs
+- struct fields assume order matters, but this is only relevant for tuple structs
 
 -- DONE ------------------------------------------------------------------------
+- done - Compare between two commits.
 - done - Freestanding functions
 - done - traits
 - done - enum declaration
