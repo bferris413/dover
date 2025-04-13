@@ -1,6 +1,7 @@
 use std::fmt::{Display, Write};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use overview::enums::{Enum, Enums, EnumsDiff};
@@ -58,8 +59,9 @@ impl Display for ExistenceChange {
     }
 }
 
-fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
-    let file: File = syn::parse_file(&contents).context("Error parsing {path}")?;
+fn get_overview(path: PathBuf, source: String) -> Result<Overview> {
+    let file: File = syn::parse_file(&source).context("Error parsing {path}")?;
+    let source = SourceFile::from(source);
     let mut use_statements = Vec::new();
     let mut functions = Vec::new();
     let mut structs = Vec::new();
@@ -91,17 +93,26 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
         }
     }
 
-    let traits = traits.into_iter().map(Trait::from).collect();
+    let traits = traits
+        .into_iter()
+        .map(|t| Trait::new(t, source.clone()))
+        .collect();
     let traits = Traits::from(traits);
 
-    let structs = structs.into_iter().map(Struct::from).collect();
+    let structs = structs
+        .into_iter()
+        .map(|s| Struct::new(s, source.clone()))
+        .collect();
     let structs = Structs::from(structs);
 
-    let enums = enums.into_iter().map(Enum::from).collect();
+    let enums = enums
+        .into_iter()
+        .map(|e| Enum::new(e, source.clone()))
+        .collect();
     let enums = Enums::from(enums);
 
-    let functions = Functions::from(functions);
-    let impls = Impls::from(impls);
+    let functions = Functions::new_freestanding(functions, source.clone());
+    let impls = Impls::new(impls, source);
 
     let mut use_paths = Vec::new();
     for r#use in use_statements.iter() {
@@ -195,7 +206,6 @@ impl Display for Overview {
         }
 
         if !self.impls.is_empty() {
-            writeln!(f, "\nImpls:")?;
             for imp in self.impls.impls().iter() {
                 writeln!(f, "{imp}")?;
             }
@@ -430,4 +440,14 @@ impl From<Visibility> for Vis {
 pub struct VisDiff {
     pub old: Vis,
     pub new: Vis,
+}
+
+/// Cheaply cloneable reference to the original source.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+struct SourceFile(Arc<String>);
+impl From<String> for SourceFile {
+    fn from(value: String) -> Self {
+        let source = Arc::new(value);
+        SourceFile(source)
+    }
 }

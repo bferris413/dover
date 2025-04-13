@@ -6,7 +6,7 @@ use std::{
 use quote::ToTokens;
 use syn::{Item, ItemTrait, TraitItem};
 
-use crate::{get_source, Change, Diff, ExistenceChange, Vis, VisDiff};
+use crate::{get_source, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
 
 use super::generics::{Generics, GenericsDiff};
 
@@ -90,8 +90,24 @@ pub struct Trait {
     generics: Generics,
     items: Vec<TraitItem>,
     original: ItemTrait,
+    source: SourceFile,
 }
 impl Trait {
+    pub fn new(t: ItemTrait, source: SourceFile) -> Self {
+        let original = t.clone();
+        let name = t.ident.to_string();
+        let vis = t.vis.into();
+        let generics = Generics::from(t.generics);
+        let items = t.items;
+        Trait {
+            name,
+            vis,
+            generics,
+            items,
+            original,
+            source,
+        }
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -130,22 +146,6 @@ impl Diff for Trait {
         };
 
         Some(diff)
-    }
-}
-impl From<ItemTrait> for Trait {
-    fn from(t: ItemTrait) -> Self {
-        let original = t.clone();
-        let name = t.ident.to_string();
-        let vis = t.vis.into();
-        let generics = Generics::from(t.generics);
-        let items = t.items;
-        Trait {
-            name,
-            vis,
-            generics,
-            items,
-            original,
-        }
     }
 }
 

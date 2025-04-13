@@ -9,7 +9,7 @@ use syn::{
     ImplItem, Item, ItemImpl, Path, Type,
 };
 
-use crate::{overview::functions::Functions, Change, Diff, ExistenceChange};
+use crate::{overview::functions::Functions, Change, Diff, ExistenceChange, SourceFile};
 
 use super::{
     functions::{FunctionsDiff, UnsafeDiff},
@@ -19,6 +19,41 @@ use super::{
 #[derive(Debug)]
 pub struct Impls {
     impls: Vec<Impl>,
+}
+impl Impls {
+    pub fn new(impls: Vec<ItemImpl>, source: SourceFile) -> Self {
+        // This is somewhat incorrect because it doesn't consider impls in submodules of
+        // the same file, but we merge impls for now to make diffing more straightforward.
+
+        let mut merged_impls = HashMap::new();
+        for mut impl_ in impls.into_iter() {
+            let impl_key = (impl_.trait_.clone(), impl_.self_ty.clone());
+
+            if impl_.trait_.is_none() {
+                merged_impls
+                    .entry(impl_key)
+                    .and_modify(|existing_impl: &mut ItemImpl| {
+                        existing_impl.items.append(&mut impl_.items);
+                    })
+                    .or_insert(impl_);
+            } else {
+                let overwrote_impl = merged_impls.insert(impl_key, impl_);
+                if let Some(impl_) = overwrote_impl {
+                    println!(
+                        "SCARY: overwrote trait impl: '{:?}' for {:?}",
+                        impl_.trait_.unwrap(),
+                        impl_.self_ty
+                    );
+                }
+            }
+        }
+        let impls = merged_impls
+            .into_iter()
+            .map(|(_, impl_)| Impl::new(impl_, source.clone()))
+            .collect();
+
+        Impls { impls }
+    }
 }
 impl Diff for Impls {
     type Diff = ImplsDiff;
@@ -85,41 +120,6 @@ impl Impls {
         self.impls.as_slice()
     }
 }
-impl From<Vec<ItemImpl>> for Impls {
-    fn from(impls: Vec<ItemImpl>) -> Self {
-        // This is somewhat incorrect because it doesn't consider impls in submodules of
-        // the same file, but we merge impls for now to make diffing more straightforward.
-
-        let mut merged_impls = HashMap::new();
-        for mut impl_ in impls.into_iter() {
-            let impl_key = (impl_.trait_.clone(), impl_.self_ty.clone());
-
-            if impl_.trait_.is_none() {
-                merged_impls
-                    .entry(impl_key)
-                    .and_modify(|existing_impl: &mut ItemImpl| {
-                        existing_impl.items.append(&mut impl_.items);
-                    })
-                    .or_insert(impl_);
-            } else {
-                let overwrote_impl = merged_impls.insert(impl_key, impl_);
-                if let Some(impl_) = overwrote_impl {
-                    println!(
-                        "SCARY: overwrote trait impl: '{:?}' for {:?}",
-                        impl_.trait_.unwrap(),
-                        impl_.self_ty
-                    );
-                }
-            }
-        }
-        let impls = merged_impls
-            .into_iter()
-            .map(|(_, impl_)| Impl::from(impl_))
-            .collect();
-
-        Impls { impls }
-    }
-}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Impl {
@@ -129,6 +129,25 @@ pub struct Impl {
     trait_: Option<(Option<Not>, Path, For)>,
     self_ty: Box<Type>,
     items: Vec<ImplItem>,
+    source: SourceFile,
+}
+impl Impl {
+    pub fn new(i: ItemImpl, source: SourceFile) -> Self {
+        let unsafety = i.unsafety.clone();
+        let generics = Generics::from(i.generics.clone());
+        let trait_ = i.trait_.clone();
+        let self_ty = i.self_ty.clone();
+        let items = i.items.clone();
+        Impl {
+            original: i,
+            unsafety,
+            generics,
+            trait_,
+            self_ty,
+            items,
+            source,
+        }
+    }
 }
 impl Diff for Impl {
     type Diff = Option<ImplDiff>;
@@ -150,7 +169,39 @@ impl Diff for Impl {
 
         let unsafe_diff = self.unsafety.diff_with(&other.unsafety);
         let generics_diff = self.generics.diff_with(&other.generics);
-        let items_diff = self.items.diff_with(&other.items);
+        let items_diff = {
+            // TODO: only supports functions
+            if self.items == other.items {
+                return None;
+            }
+
+            let self_fn_items: Vec<_> = self
+                .items
+                .iter()
+                .filter_map(|i| match i {
+                    ImplItem::Fn(func) => Some(func.clone()),
+                    _ => None,
+                })
+                .collect();
+            let other_fn_items: Vec<_> = other
+                .items
+                .iter()
+                .filter_map(|i| match i {
+                    ImplItem::Fn(func) => Some(func.clone()),
+                    _ => None,
+                })
+                .collect();
+
+            let self_items_fns = Functions::new_impl(self_fn_items, self.source.clone());
+            let other_items_fns = Functions::new_impl(other_fn_items, other.source.clone());
+
+            let fns_diff = self_items_fns.diff_with(&other_items_fns);
+            if fns_diff.is_empty() {
+                None
+            } else {
+                Some(ImplItemsDiff { fns_diff })
+            }
+        };
 
         if unsafe_diff.is_none() && generics_diff.is_none() && items_diff.is_none() {
             None
@@ -169,23 +220,6 @@ impl Diff for Impl {
 impl fmt::Display for Impl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(impl)")
-    }
-}
-impl From<ItemImpl> for Impl {
-    fn from(original: ItemImpl) -> Self {
-        let unsafety = original.unsafety.clone();
-        let generics = Generics::from(original.generics.clone());
-        let trait_ = original.trait_.clone();
-        let self_ty = original.self_ty.clone();
-        let items = original.items.clone();
-        Impl {
-            original,
-            unsafety,
-            generics,
-            trait_,
-            self_ty,
-            items,
-        }
     }
 }
 
@@ -377,41 +411,6 @@ impl Display for ImplDiff {
             write!(f, "{formatted_output}\n{diff_output}")
         } else {
             write!(f, "{formatted_output}")
-        }
-    }
-}
-
-impl Diff for Vec<ImplItem> {
-    type Diff = Option<ImplItemsDiff>;
-    fn diff_with(&self, other: &Self) -> Self::Diff {
-        // TODO: only supports functions
-        if self == other {
-            return None;
-        }
-
-        let self_fn_items: Vec<_> = self
-            .iter()
-            .filter_map(|i| match i {
-                ImplItem::Fn(func) => Some(func.clone()),
-                _ => None,
-            })
-            .collect();
-        let other_fn_items: Vec<_> = other
-            .iter()
-            .filter_map(|i| match i {
-                ImplItem::Fn(func) => Some(func.clone()),
-                _ => None,
-            })
-            .collect();
-
-        let self_fns = Functions::from(self_fn_items);
-        let other_fns = Functions::from(other_fn_items);
-
-        let fns_diff = self_fns.diff_with(&other_fns);
-        if fns_diff.is_empty() {
-            None
-        } else {
-            Some(ImplItemsDiff { fns_diff })
         }
     }
 }

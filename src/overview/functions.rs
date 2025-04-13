@@ -8,7 +8,7 @@ use syn::{
     Abi, FnArg, ImplItemFn, Item, ItemFn, ReturnType,
 };
 
-use crate::{get_source, Change, Diff, ExistenceChange, Vis, VisDiff};
+use crate::{get_source, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
 
 use super::generics::{Generics, GenericsDiff};
 
@@ -18,31 +18,30 @@ use super::generics::{Generics, GenericsDiff};
 #[derive(Debug, Eq, PartialEq)]
 pub struct Functions(Vec<Function>);
 impl Functions {
+    /// Creates a complete set of freestanding `Function` declarations from a list of `syn::ItemFn`.
+    pub fn new_freestanding(fns: Vec<ItemFn>, source: SourceFile) -> Self {
+        let mut functions: Vec<Function> = fns
+            .into_iter()
+            .map(|item| Function::new_freestanding(item, source.clone()))
+            .collect();
+        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
+        functions.dedup_by(|f1, f2| f1.name() == f2.name());
+        Functions(functions)
+    }
+    pub fn new_impl(fns: Vec<ImplItemFn>, source: SourceFile) -> Self {
+        let mut functions: Vec<Function> = fns
+            .into_iter()
+            .map(|item| Function::new_impl(item, source.clone()))
+            .collect();
+        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
+        functions.dedup_by(|f1, f2| f1.name() == f2.name());
+        Functions(functions)
+    }
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
     pub fn functions(&self) -> &[Function] {
         &self.0
-    }
-}
-impl From<Vec<ItemFn>> for Functions {
-    /// Creates a complete set of freestanding `Function` declarations from a list of `syn::ItemFn`.
-    fn from(fns: Vec<ItemFn>) -> Self {
-        let mut functions: Vec<Function> =
-            fns.into_iter().map(|item| Function::from(item)).collect();
-        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
-        functions.dedup_by(|f1, f2| f1.name() == f2.name());
-        Functions(functions)
-    }
-}
-impl From<Vec<ImplItemFn>> for Functions {
-    /// Creates a complete set of freestanding `Function` declarations from a list of `syn::ItemFn`.
-    fn from(fns: Vec<ImplItemFn>) -> Self {
-        let mut functions: Vec<Function> =
-            fns.into_iter().map(|item| Function::from(item)).collect();
-        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
-        functions.dedup_by(|f1, f2| f1.name() == f2.name());
-        Functions(functions)
     }
 }
 impl Diff for Functions {
@@ -108,8 +107,49 @@ pub struct Function {
     inputs: Inputs,
     output: ReturnType,
     original_fn: ItemFn,
+    source: SourceFile,
 }
 impl Function {
+    pub fn new_freestanding(f: ItemFn, source: SourceFile) -> Self {
+        Function {
+            vis: f.vis.clone().into(),
+            r#const: f.sig.constness,
+            r#async: f.sig.asyncness,
+            r#unsafe: f.sig.unsafety,
+            abi: f.sig.abi.clone(),
+            name: f.sig.ident.to_string(),
+            generics: Generics::from(f.sig.generics.clone()),
+            inputs: Inputs {
+                args: f.sig.clone().inputs.into_iter().collect(),
+            },
+            output: f.sig.output.clone(),
+            original_fn: f.clone(),
+            source,
+        }
+    }
+    pub fn new_impl(f: ImplItemFn, source: SourceFile) -> Self {
+        Function {
+            vis: f.vis.clone().into(),
+            r#const: f.sig.constness,
+            r#async: f.sig.asyncness,
+            r#unsafe: f.sig.unsafety,
+            abi: f.sig.abi.clone(),
+            name: f.sig.ident.to_string(),
+            generics: Generics::from(f.sig.generics.clone()),
+            inputs: Inputs {
+                args: f.sig.clone().inputs.into_iter().collect(),
+            },
+            output: f.sig.output.clone(),
+            // TODO: bad and tricky, plus we're losing a piece of ImplItemFn ('default' field)
+            original_fn: ItemFn {
+                attrs: f.attrs,
+                vis: f.vis,
+                sig: f.sig,
+                block: Box::new(f.block),
+            },
+            source,
+        }
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -118,48 +158,6 @@ impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let source = remove_block(get_source(vec![Item::Fn(self.original_fn.clone())]));
         write!(f, "{source}")
-    }
-}
-impl From<ItemFn> for Function {
-    fn from(item: ItemFn) -> Self {
-        Function {
-            vis: item.vis.clone().into(),
-            r#const: item.sig.constness,
-            r#async: item.sig.asyncness,
-            r#unsafe: item.sig.unsafety,
-            abi: item.sig.abi.clone(),
-            name: item.sig.ident.to_string(),
-            generics: Generics::from(item.sig.generics.clone()),
-            inputs: Inputs {
-                args: item.sig.clone().inputs.into_iter().collect(),
-            },
-            output: item.sig.output.clone(),
-            original_fn: item.clone(),
-        }
-    }
-}
-impl From<ImplItemFn> for Function {
-    fn from(item: ImplItemFn) -> Self {
-        Function {
-            vis: item.vis.clone().into(),
-            r#const: item.sig.constness,
-            r#async: item.sig.asyncness,
-            r#unsafe: item.sig.unsafety,
-            abi: item.sig.abi.clone(),
-            name: item.sig.ident.to_string(),
-            generics: Generics::from(item.sig.generics.clone()),
-            inputs: Inputs {
-                args: item.sig.clone().inputs.into_iter().collect(),
-            },
-            output: item.sig.output.clone(),
-            // TODO: bad and tricky, plus we're losing a piece of ImplItemFn ('default' field)
-            original_fn: ItemFn {
-                attrs: item.attrs,
-                vis: item.vis,
-                sig: item.sig,
-                block: Box::new(item.block),
-            },
-        }
     }
 }
 impl Diff for Function {

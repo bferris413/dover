@@ -6,7 +6,9 @@ use std::{
 use quote::ToTokens;
 use syn::{Item, ItemEnum};
 
-use crate::{format_as_columns, get_source, Change, Diff, ExistenceChange, Vis, VisDiff};
+use crate::{
+    format_as_columns, get_source, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff,
+};
 
 use super::{
     generics::{Generics, GenericsDiff},
@@ -98,8 +100,26 @@ pub struct Enum {
     variants: Variants,
     generics: Generics,
     original: ItemEnum,
+    source: SourceFile,
 }
 impl Enum {
+    pub fn new(e: ItemEnum, source: SourceFile) -> Self {
+        let original = e.clone();
+        let vis = e.vis.into();
+        let name = e.ident.to_string();
+        let variants: Vec<_> = e.variants.into_iter().collect();
+        let variants = Variants::from(variants);
+        let generics = Generics::from(e.generics.clone());
+
+        Self {
+            name,
+            vis,
+            variants,
+            generics,
+            original,
+            source,
+        }
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -131,24 +151,6 @@ impl Diff for Enum {
             variants_diff,
             generics_diff,
         })
-    }
-}
-impl From<ItemEnum> for Enum {
-    fn from(s: ItemEnum) -> Self {
-        let original = s.clone();
-        let vis = s.vis.into();
-        let name = s.ident.to_string();
-        let variants: Vec<_> = s.variants.into_iter().collect();
-        let variants = Variants::from(variants);
-        let generics = Generics::from(s.generics.clone());
-
-        Self {
-            name,
-            vis,
-            variants,
-            generics,
-            original,
-        }
     }
 }
 impl Display for Enum {

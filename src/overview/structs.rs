@@ -6,7 +6,7 @@ use std::{
 use quote::ToTokens;
 use syn::{Item, ItemStruct};
 
-use crate::{Change, Diff, ExistenceChange, Vis, VisDiff};
+use crate::{Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
 
 use super::{
     fields::{Fields, FieldsDiff},
@@ -97,8 +97,26 @@ pub struct Struct {
     fields: Fields,
     generics: Generics,
     original: ItemStruct,
+    source: SourceFile,
 }
 impl Struct {
+    pub fn new(s: ItemStruct, source: SourceFile) -> Self {
+        let original = s.clone();
+        let vis: Vis = s.vis.into();
+        let name = s.ident.to_string();
+        let fields = s.fields.into_iter().collect();
+        let fields = Fields(fields);
+        let generics = Generics::from(s.generics.clone());
+
+        Self {
+            name,
+            vis,
+            fields,
+            generics,
+            original,
+            source,
+        }
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -131,24 +149,6 @@ impl Diff for Struct {
             fields_diff,
             generics_diff,
         })
-    }
-}
-impl From<ItemStruct> for Struct {
-    fn from(s: ItemStruct) -> Self {
-        let original = s.clone();
-        let vis: Vis = s.vis.into();
-        let name = s.ident.to_string();
-        let fields = s.fields.into_iter().collect();
-        let fields = Fields(fields);
-        let generics = Generics::from(s.generics.clone());
-
-        Self {
-            name,
-            vis,
-            fields,
-            generics,
-            original,
-        }
     }
 }
 impl Display for Struct {

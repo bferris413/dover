@@ -19,6 +19,7 @@
 - attributes - trait
 - attributes - module
 - From<ImplItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
+- use proc-macro2 for the initial parse (this gives us line info that syn::parse doesn't give)
 
 -- BUG --------------------------------------------------------------------------
 - struct fields assume order matters, but this is only relevant for tuple structs

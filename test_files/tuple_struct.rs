@@ -1,4 +1,4 @@
-// use cake::cheese;
+use cake::cheese;
 
 pub fn build<T: Clone>(i: u32, y: T) -> T {
     i
