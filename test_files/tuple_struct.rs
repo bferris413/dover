@@ -16,6 +16,11 @@ pub fn build<T: Clone>(i: u32, y: T) -> T {
 
 struct Struct;
 struct Struct1;
+impl Struct1 {
+    fn new(field2: u64) -> Self {
+        Self
+    }
+}
 
 // pub struct Thing<T, U, V: Clone, W, X>
 // where

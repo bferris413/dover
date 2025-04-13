@@ -215,8 +215,12 @@ impl Display for TraitDiff {
                 (None, None) => panic!("old and new traits were both None"),
                 (Some(t), None) | (None, Some(t)) => t,
             };
-            let source = crate::get_source(vec![Item::Trait(t.clone())]);
-            return write!(f, "{ex} {source}");
+            let source = crate::get_source(vec![Item::Trait(t.clone())])
+                .lines()
+                .map(|line| format!("{ex} {line}"))
+                .collect::<Vec<String>>()
+                .join("\n");
+            return write!(f, "{source}");
         }
 
         let mut left_column = Vec::new();

@@ -589,9 +589,9 @@ pub struct AsyncDiff {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UnsafeDiff {
-    existence: ExistenceChange,
-    old: String,
-    new: String,
+    pub existence: ExistenceChange,
+    pub old: String,
+    pub new: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

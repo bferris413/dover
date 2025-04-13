@@ -233,8 +233,12 @@ impl Display for StructDiff {
                 (Some(s), None) | (None, Some(s)) => s,
             };
 
-            let source = crate::get_source(vec![Item::Struct(s.clone())]);
-            return write!(f, "{ex} {source}");
+            let source = crate::get_source(vec![Item::Struct(s.clone())])
+                .lines()
+                .map(|line| format!("{ex} {line}"))
+                .collect::<Vec<String>>()
+                .join("\n");
+            return write!(f, "{source}");
         }
 
         let mut left_column = Vec::new();

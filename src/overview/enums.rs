@@ -233,8 +233,12 @@ impl Display for EnumDiff {
                 (Some(e), None) | (None, Some(e)) => e,
             };
 
-            let source = get_source(vec![Item::Enum(e.clone())]);
-            return write!(f, "{ex} {source}");
+            let source = get_source(vec![Item::Enum(e.clone())])
+                .lines()
+                .map(|line| format!("{ex} {line}"))
+                .collect::<Vec<String>>()
+                .join("\n");
+            return write!(f, "{source}");
         }
 
         let mut left_column = Vec::new();

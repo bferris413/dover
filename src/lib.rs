@@ -85,7 +85,7 @@ fn get_overview(path: PathBuf, contents: String) -> Result<Overview> {
                 traits.push(item_trait);
             }
             Item::Impl(item_impl) => {
-                impls.push(dbg!(item_impl));
+                impls.push(item_impl);
             }
             _ => {}
         }

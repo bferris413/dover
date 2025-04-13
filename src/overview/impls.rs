@@ -1,11 +1,12 @@
 use std::{
     collections::HashMap,
-    fmt::{self, Display},
+    fmt::{self, Display, Write},
 };
 
+use quote::ToTokens;
 use syn::{
     token::{For, Not, Unsafe},
-    ImplItem, ItemImpl, Path, Type,
+    ImplItem, Item, ItemImpl, Path, Type,
 };
 
 use crate::{overview::functions::Functions, Change, Diff, ExistenceChange};
@@ -187,11 +188,6 @@ impl From<ItemImpl> for Impl {
         }
     }
 }
-impl Impl {
-    pub fn original(&self) -> &ItemImpl {
-        &self.original
-    }
-}
 
 pub struct ImplsDiff {
     impl_diffs: Vec<ImplDiff>,
@@ -203,7 +199,47 @@ impl ImplsDiff {
 }
 impl Display for ImplsDiff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        if self.impl_diffs.is_empty() {
+            return writeln!(f, "(no changes)");
+        }
+
+        let ex_diffs = self
+            .impl_diffs
+            .iter()
+            .filter(|diff| matches!(diff.change, Change::Existence(_)));
+
+        let (mut left_col, mut right_col) = (String::new(), String::new());
+        let mut any_ex_diffs = false;
+        for diff in ex_diffs {
+            any_ex_diffs = true;
+            match diff.change {
+                Change::Existence(ExistenceChange::Added) => {
+                    write!(right_col, "{diff}")?;
+                }
+                Change::Existence(ExistenceChange::Deleted) => {
+                    write!(left_col, "{diff}")?;
+                }
+                _ => {
+                    unreachable!()
+                }
+            }
+        }
+
+        if any_ex_diffs {
+            let output = crate::format_as_columns(&vec![left_col], &vec![right_col]);
+            writeln!(f, "{output}")?;
+        }
+
+        let mod_diffs = self
+            .impl_diffs
+            .iter()
+            .filter(|diff| matches!(diff.change, Change::Modified));
+
+        for diff in mod_diffs {
+            writeln!(f, "{diff}")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -214,6 +250,135 @@ pub struct ImplDiff {
     unsafe_diff: Option<UnsafeDiff>,
     generics_diff: Option<GenericsDiff>,
     items_diff: Option<ImplItemsDiff>,
+}
+impl Display for ImplDiff {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Change::Existence(ex) = self.change {
+            let i = match (&self.old, &self.new) {
+                (Some(_), Some(_)) => panic!("old and new impls were both Some"),
+                (None, None) => panic!("old and new impls were both None"),
+                (Some(s), None) | (None, Some(s)) => s,
+            };
+
+            let source = crate::get_source(vec![Item::Impl(i.clone())])
+                .lines()
+                .map(|line| format!("{ex} {line}"))
+                .collect::<Vec<String>>()
+                .join("\n");
+
+            return write!(f, "{source}");
+        }
+
+        let mut left_column = Vec::new();
+        let mut right_column = Vec::new();
+
+        // old and new impl blocks
+        let old = self.old.as_ref().unwrap();
+        let new = self.new.as_ref().unwrap();
+        let old_source = crate::get_source(vec![Item::Impl(old.clone())])
+            .lines()
+            .map(|line| format!("~ {line}"))
+            .collect::<Vec<String>>()
+            .join("\n");
+        let new_source = crate::get_source(vec![Item::Impl(new.clone())])
+            .lines()
+            .map(|line| format!("~ {line}"))
+            .collect::<Vec<String>>()
+            .join("\n");
+        left_column.push(old_source);
+        right_column.push(new_source);
+
+        // old and new unsafe modifiers, if any
+        if let Some(ud) = &self.unsafe_diff {
+            left_column.push("\nunsafe:".to_string());
+            right_column.push(String::new());
+            left_column.push(format!("- {}", ud.old));
+            right_column.push(format!("+ {}", ud.new));
+        }
+
+        // generics
+        if let Some(gd) = &self.generics_diff {
+            // generic param diff, if any
+            if let Some(pd) = gd.params_diff() {
+                let mut old_params = Vec::new();
+                let mut new_params = Vec::new();
+
+                for pd in pd.iter() {
+                    let param_source = pd.param().unwrap().to_token_stream().to_string();
+                    // let param_source = get_source(vec![Item::Verbatim(param_tokens)]);
+                    match pd.change() {
+                        ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
+                        ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
+                    }
+                }
+
+                left_column.push("\ngeneric parameters:".to_string());
+                right_column.push(String::new());
+                left_column.push(old_params.join("\n"));
+                right_column.push(new_params.join("\n"));
+            }
+
+            // where clause diff, if any
+            if let Some(wd) = gd.where_diff() {
+                left_column.push("\nwhere clause:".to_string());
+                right_column.push(String::new());
+                match wd.change() {
+                    Change::Existence(ex) => {
+                        // where clause was added or deleted wholesale
+                        let where_clause_source =
+                            wd.where_clause().unwrap().to_token_stream().to_string();
+                        // let where_clause_source = get_source(vec![Item::Verbatim(where_clause)]);
+                        match ex {
+                            ExistenceChange::Deleted => {
+                                left_column.push(format!("- {where_clause_source}"));
+                                right_column.push(String::new());
+                            }
+                            ExistenceChange::Added => {
+                                right_column.push(format!("+ {where_clause_source}"));
+                                left_column.push(String::new());
+                            }
+                        }
+                    }
+                    Change::Modified => {
+                        // where clause predicates were added or deleted
+                        let predicate_diffs = wd.predicates().unwrap();
+                        let mut old_predicates = Vec::new();
+                        let mut new_predicates = Vec::new();
+
+                        for pred_diff in predicate_diffs.iter() {
+                            let predicate_source =
+                                pred_diff.predicate().unwrap().to_token_stream().to_string();
+                            // let predicate_source =
+                            //     get_source(vec![Item::Verbatim(predicate_tokens)]);
+                            match pred_diff.change() {
+                                ExistenceChange::Deleted => {
+                                    old_predicates.push(format!("- {predicate_source}",))
+                                }
+                                ExistenceChange::Added => {
+                                    new_predicates.push(format!("+ {predicate_source}",))
+                                }
+                            }
+                        }
+
+                        left_column.push(old_predicates.join("\n"));
+                        right_column.push(new_predicates.join("\n"));
+                    }
+                }
+            }
+        }
+
+        let impls_fns_diff = self
+            .items_diff
+            .as_ref()
+            .map(|id| format!("{}", id.fns_diff));
+
+        let formatted_output = crate::format_as_columns(&left_column, &right_column);
+        if let Some(diff_output) = impls_fns_diff {
+            write!(f, "{formatted_output}\n{diff_output}")
+        } else {
+            write!(f, "{formatted_output}")
+        }
+    }
 }
 
 impl Diff for Vec<ImplItem> {
@@ -231,7 +396,7 @@ impl Diff for Vec<ImplItem> {
                 _ => None,
             })
             .collect();
-        let other_fn_items: Vec<_> = self
+        let other_fn_items: Vec<_> = other
             .iter()
             .filter_map(|i| match i {
                 ImplItem::Fn(func) => Some(func.clone()),
