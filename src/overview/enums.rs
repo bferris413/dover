@@ -3,17 +3,15 @@ use std::{
     ops::Deref,
 };
 
-use quote::ToTokens;
-use syn::{Item, ItemEnum};
+use syn::{spanned::Spanned, ItemEnum};
 
-use crate::{
-    format_as_columns, get_source, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff,
-};
+use crate::{format_as_columns, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
 
 use super::{
     generics::{Generics, GenericsDiff},
     variants::{VariantDiffs, Variants},
 };
+const NO_SRC_ERROR: &str = "No source text for enum, was parse logic changed?";
 
 /// A collection of `enum` declarations.
 ///
@@ -235,7 +233,10 @@ impl Display for EnumDiff {
                 (Some(e), None) | (None, Some(e)) => e,
             };
 
-            let source = get_source(vec![Item::Enum(e.clone())])
+            let source = e
+                .span()
+                .source_text()
+                .expect(NO_SRC_ERROR)
                 .lines()
                 .map(|line| format!("{ex} {line}"))
                 .collect::<Vec<String>>()
@@ -249,12 +250,18 @@ impl Display for EnumDiff {
         // old and new neum declarations
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
-        let old_source = get_source(vec![Item::Enum(old.clone())])
+        let old_source = old
+            .span()
+            .source_text()
+            .expect(NO_SRC_ERROR)
             .lines()
             .map(|line| format!("~ {line}"))
             .collect::<Vec<String>>()
             .join("\n");
-        let new_source = get_source(vec![Item::Enum(new.clone())])
+        let new_source = new
+            .span()
+            .source_text()
+            .expect(NO_SRC_ERROR)
             .lines()
             .map(|line| format!("~ {line}"))
             .collect::<Vec<String>>()
@@ -281,20 +288,22 @@ impl Display for EnumDiff {
                         match ex {
                             ExistenceChange::Deleted => {
                                 let variant_source =
-                                    vd.old().unwrap().to_token_stream().to_string();
+                                    vd.old().unwrap().span().source_text().expect(NO_SRC_ERROR);
                                 old_variants.push(format!("- {variant_source}",))
                             }
                             ExistenceChange::Added => {
                                 let variant_source =
-                                    vd.new().unwrap().to_token_stream().to_string();
+                                    vd.new().unwrap().span().source_text().expect(NO_SRC_ERROR);
                                 new_variants.push(format!("+ {variant_source}",))
                             }
                         }
                     }
                     Change::Modified => {
                         // variant was modified
-                        let old_variant_source = vd.old().unwrap().to_token_stream().to_string();
-                        let new_variant_source = vd.new().unwrap().to_token_stream().to_string();
+                        let old_variant_source =
+                            vd.old().unwrap().span().source_text().expect(NO_SRC_ERROR);
+                        let new_variant_source =
+                            vd.new().unwrap().span().source_text().expect(NO_SRC_ERROR);
                         old_variants.push(format!("- {old_variant_source}",));
                         new_variants.push(format!("+ {new_variant_source}",));
                     }
@@ -315,7 +324,12 @@ impl Display for EnumDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd.param().unwrap().to_token_stream().to_string();
+                    let param_source = pd
+                        .param()
+                        .unwrap()
+                        .span()
+                        .source_text()
+                        .expect(NO_SRC_ERROR);
                     // let param_source = get_source(vec![Item::Verbatim(param_tokens)]);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
@@ -336,8 +350,12 @@ impl Display for EnumDiff {
                 match wd.change() {
                     Change::Existence(ex) => {
                         // where clause was added or deleted wholesale
-                        let where_clause_source =
-                            wd.where_clause().unwrap().to_token_stream().to_string();
+                        let where_clause_source = wd
+                            .where_clause()
+                            .unwrap()
+                            .span()
+                            .source_text()
+                            .expect(NO_SRC_ERROR);
                         // let where_clause_source = get_source(vec![Item::Verbatim(where_clause)]);
                         match ex {
                             ExistenceChange::Deleted => {
@@ -357,10 +375,12 @@ impl Display for EnumDiff {
                         let mut new_predicates = Vec::new();
 
                         for pred_diff in predicate_diffs.iter() {
-                            let predicate_source =
-                                pred_diff.predicate().unwrap().to_token_stream().to_string();
-                            // let predicate_source =
-                            //     get_source(vec![Item::Verbatim(predicate_tokens)]);
+                            let predicate_source = pred_diff
+                                .predicate()
+                                .unwrap()
+                                .span()
+                                .source_text()
+                                .expect(NO_SRC_ERROR);
                             match pred_diff.change() {
                                 ExistenceChange::Deleted => {
                                     old_predicates.push(format!("- {predicate_source}",))
