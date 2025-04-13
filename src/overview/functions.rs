@@ -5,7 +5,7 @@ use std::fmt::{
 use quote::ToTokens;
 use syn::{
     token::{Async, Const, Unsafe},
-    Abi, FnArg, Item, ItemFn, ReturnType,
+    Abi, FnArg, ImplItemFn, Item, ItemFn, ReturnType,
 };
 
 use crate::{get_source, Change, Diff, ExistenceChange, Vis, VisDiff};
@@ -28,6 +28,16 @@ impl Functions {
 impl From<Vec<ItemFn>> for Functions {
     /// Creates a complete set of freestanding `Function` declarations from a list of `syn::ItemFn`.
     fn from(fns: Vec<ItemFn>) -> Self {
+        let mut functions: Vec<Function> =
+            fns.into_iter().map(|item| Function::from(item)).collect();
+        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
+        functions.dedup_by(|f1, f2| f1.name() == f2.name());
+        Functions(functions)
+    }
+}
+impl From<Vec<ImplItemFn>> for Functions {
+    /// Creates a complete set of freestanding `Function` declarations from a list of `syn::ItemFn`.
+    fn from(fns: Vec<ImplItemFn>) -> Self {
         let mut functions: Vec<Function> =
             fns.into_iter().map(|item| Function::from(item)).collect();
         functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
@@ -125,6 +135,30 @@ impl From<ItemFn> for Function {
             },
             output: item.sig.output.clone(),
             original_fn: item.clone(),
+        }
+    }
+}
+impl From<ImplItemFn> for Function {
+    fn from(item: ImplItemFn) -> Self {
+        Function {
+            vis: item.vis.clone().into(),
+            r#const: item.sig.constness,
+            r#async: item.sig.asyncness,
+            r#unsafe: item.sig.unsafety,
+            abi: item.sig.abi.clone(),
+            name: item.sig.ident.to_string(),
+            generics: Generics::from(item.sig.generics.clone()),
+            inputs: Inputs {
+                args: item.sig.clone().inputs.into_iter().collect(),
+            },
+            output: item.sig.output.clone(),
+            // TODO: bad and tricky, plus we're losing a piece of ImplItemFn ('default' field)
+            original_fn: ItemFn {
+                attrs: item.attrs,
+                vis: item.vis,
+                sig: item.sig,
+                block: Box::new(item.block),
+            },
         }
     }
 }

@@ -4,12 +4,21 @@
 - Figure out sensible defaults for add/remove files
 - Identify freestanding function signature pieces
 - Refactor old/new pattern to use single underlying type
-- struct impl
-- trait impl
+- struct impl - fn
+- trait impl - fn
+- enum impl - fn
 - "fragment" formatter
 - probably need to add attributes for all items
-- enum impl
 - colored output
+- impl item - const
+- impl item - macro
+- impl item - type
+- attributes - fn
+- attributes - enum
+- attributes - struct
+- attributes - trait
+- attributes - module
+- From<ImplItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
 
 -- BUG --------------------------------------------------------------------------
 - struct fields assume order matters, but this is only relevant for tuple structs

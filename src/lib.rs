@@ -286,6 +286,11 @@ impl Display for OverviewDiff {
             writeln!(&mut string_builder, "{}", self.functions_diff)?;
         }
 
+        if !self.impls_diff.is_empty() {
+            writeln!(&mut string_builder, "{}", underlined("Impls"))?;
+            writeln!(&mut string_builder, "{}", self.impls_diff)?;
+        }
+
         while string_builder.ends_with('\n') {
             string_builder.pop().unwrap();
         }
