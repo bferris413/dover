@@ -3,10 +3,10 @@ use std::{
     fmt::{self, Display, Write},
 };
 
-use quote::ToTokens;
 use syn::{
+    spanned::Spanned,
     token::{For, Not, Unsafe},
-    ImplItem, Item, ItemImpl, Path, Type,
+    ImplItem, ItemImpl, Path, Type,
 };
 
 use crate::{overview::functions::Functions, Change, Diff, ExistenceChange, SourceFile};
@@ -15,6 +15,8 @@ use super::{
     functions::{FunctionsDiff, UnsafeDiff},
     generics::{Generics, GenericsDiff},
 };
+
+const NO_SRC_ERROR: &str = "No source text for impl, was parse logic changed?";
 
 #[derive(Debug)]
 pub struct Impls {
@@ -291,10 +293,13 @@ impl Display for ImplDiff {
             let i = match (&self.old, &self.new) {
                 (Some(_), Some(_)) => panic!("old and new impls were both Some"),
                 (None, None) => panic!("old and new impls were both None"),
-                (Some(s), None) | (None, Some(s)) => s,
+                (Some(i), None) | (None, Some(i)) => i,
             };
 
-            let source = crate::get_source(vec![Item::Impl(i.clone())])
+            let source = i
+                .span()
+                .source_text()
+                .expect(NO_SRC_ERROR)
                 .lines()
                 .map(|line| format!("{ex} {line}"))
                 .collect::<Vec<String>>()
@@ -309,12 +314,18 @@ impl Display for ImplDiff {
         // old and new impl blocks
         let old = self.old.as_ref().unwrap();
         let new = self.new.as_ref().unwrap();
-        let old_source = crate::get_source(vec![Item::Impl(old.clone())])
+        let old_source = old
+            .span()
+            .source_text()
+            .expect(NO_SRC_ERROR)
             .lines()
             .map(|line| format!("~ {line}"))
             .collect::<Vec<String>>()
             .join("\n");
-        let new_source = crate::get_source(vec![Item::Impl(new.clone())])
+        let new_source = new
+            .span()
+            .source_text()
+            .expect(NO_SRC_ERROR)
             .lines()
             .map(|line| format!("~ {line}"))
             .collect::<Vec<String>>()
@@ -338,8 +349,12 @@ impl Display for ImplDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd.param().unwrap().to_token_stream().to_string();
-                    // let param_source = get_source(vec![Item::Verbatim(param_tokens)]);
+                    let param_source = pd
+                        .param()
+                        .unwrap()
+                        .span()
+                        .source_text()
+                        .expect(NO_SRC_ERROR);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
                         ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
@@ -359,9 +374,12 @@ impl Display for ImplDiff {
                 match wd.change() {
                     Change::Existence(ex) => {
                         // where clause was added or deleted wholesale
-                        let where_clause_source =
-                            wd.where_clause().unwrap().to_token_stream().to_string();
-                        // let where_clause_source = get_source(vec![Item::Verbatim(where_clause)]);
+                        let where_clause_source = wd
+                            .where_clause()
+                            .unwrap()
+                            .span()
+                            .source_text()
+                            .expect(NO_SRC_ERROR);
                         match ex {
                             ExistenceChange::Deleted => {
                                 left_column.push(format!("- {where_clause_source}"));
@@ -380,10 +398,12 @@ impl Display for ImplDiff {
                         let mut new_predicates = Vec::new();
 
                         for pred_diff in predicate_diffs.iter() {
-                            let predicate_source =
-                                pred_diff.predicate().unwrap().to_token_stream().to_string();
-                            // let predicate_source =
-                            //     get_source(vec![Item::Verbatim(predicate_tokens)]);
+                            let predicate_source = pred_diff
+                                .predicate()
+                                .unwrap()
+                                .span()
+                                .source_text()
+                                .expect(NO_SRC_ERROR);
                             match pred_diff.change() {
                                 ExistenceChange::Deleted => {
                                     old_predicates.push(format!("- {predicate_source}",))
