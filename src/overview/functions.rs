@@ -2,15 +2,17 @@ use std::fmt::{
     Formatter, {Display, Write},
 };
 
-use quote::ToTokens;
 use syn::{
+    spanned::Spanned,
     token::{Async, Const, Unsafe},
-    Abi, FnArg, ImplItemFn, Item, ItemFn, ReturnType,
+    Abi, FnArg, ImplItemFn, ItemFn, ReturnType,
 };
 
-use crate::{get_source, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
+use crate::{Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
 
 use super::generics::{Generics, GenericsDiff};
+
+const NO_SRC_ERROR: &str = "No source text for function, was parse logic changed?";
 
 /// A collection of freestanding `fn` definitions.
 ///
@@ -156,7 +158,7 @@ impl Function {
 }
 impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let source = remove_block(get_source(vec![Item::Fn(self.original_fn.clone())]));
+        let source = remove_block(self.original_fn.span().source_text().expect(NO_SRC_ERROR));
         write!(f, "{source}")
     }
 }
@@ -301,8 +303,12 @@ impl Display for FunctionDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd.param().unwrap().to_token_stream().to_string();
-                    // let param_source = get_source(vec![Item::Verbatim(param_tokens)]);
+                    let param_source = pd
+                        .param()
+                        .unwrap()
+                        .span()
+                        .source_text()
+                        .expect(NO_SRC_ERROR);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
                         ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
@@ -322,9 +328,12 @@ impl Display for FunctionDiff {
                 match wd.change() {
                     Change::Existence(ex) => {
                         // where clause was added or deleted wholesale
-                        let where_clause_source =
-                            wd.where_clause().unwrap().to_token_stream().to_string();
-                        // let where_clause_source = get_source(vec![Item::Verbatim(where_clause)]);
+                        let where_clause_source = wd
+                            .where_clause()
+                            .unwrap()
+                            .span()
+                            .source_text()
+                            .expect(NO_SRC_ERROR);
                         match ex {
                             ExistenceChange::Deleted => {
                                 left_column.push(format!("- {where_clause_source}"));
@@ -343,10 +352,12 @@ impl Display for FunctionDiff {
                         let mut new_predicates = Vec::new();
 
                         for pred_diff in predicate_diffs.iter() {
-                            let predicate_source =
-                                pred_diff.predicate().unwrap().to_token_stream().to_string();
-                            // let predicate_source =
-                            //     get_source(vec![Item::Verbatim(predicate_tokens)]);
+                            let predicate_source = pred_diff
+                                .predicate()
+                                .unwrap()
+                                .span()
+                                .source_text()
+                                .expect(NO_SRC_ERROR);
                             match pred_diff.change() {
                                 ExistenceChange::Deleted => {
                                     old_predicates.push(format!("- {predicate_source}",))
@@ -376,20 +387,22 @@ impl Display for FunctionDiff {
                             match ex {
                                 ExistenceChange::Deleted => {
                                     let input_source =
-                                        id.old().unwrap().to_token_stream().to_string();
+                                        id.old().unwrap().span().source_text().expect(NO_SRC_ERROR);
                                     old_inputs.push(format!("- {input_source}",))
                                 }
                                 ExistenceChange::Added => {
                                     let input_source =
-                                        id.new().unwrap().to_token_stream().to_string();
+                                        id.new().unwrap().span().source_text().expect(NO_SRC_ERROR);
                                     new_inputs.push(format!("+ {input_source}",))
                                 }
                             }
                         }
                         Change::Modified => {
                             // input was modified
-                            let old_input_source = id.old().unwrap().to_token_stream().to_string();
-                            let new_input_source = id.new().unwrap().to_token_stream().to_string();
+                            let old_input_source =
+                                id.old().unwrap().span().source_text().expect(NO_SRC_ERROR);
+                            let new_input_source =
+                                id.new().unwrap().span().source_text().expect(NO_SRC_ERROR);
                             old_inputs.push(format!("- {old_input_source}",));
                             new_inputs.push(format!("+ {new_input_source}",));
                         }
@@ -406,8 +419,14 @@ impl Display for FunctionDiff {
         if let Some(rt_diff) = &self.return_type_diff {
             left_column.push("\nreturn type:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", rt_diff.old().to_token_stream().to_string()));
-            right_column.push(format!("+ {}", rt_diff.new().to_token_stream().to_string()));
+            left_column.push(format!(
+                "- {}",
+                rt_diff.old().span().source_text().expect(NO_SRC_ERROR)
+            ));
+            right_column.push(format!(
+                "+ {}",
+                rt_diff.new().span().source_text().expect(NO_SRC_ERROR)
+            ));
         }
 
         let formatted_output = crate::format_as_columns(&left_column, &right_column);

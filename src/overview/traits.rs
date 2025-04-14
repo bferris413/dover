@@ -4,11 +4,13 @@ use std::{
 };
 
 use quote::ToTokens;
-use syn::{Item, ItemTrait, TraitItem};
+use syn::{spanned::Spanned, Item, ItemTrait, TraitItem};
 
 use crate::{get_source, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
 
 use super::generics::{Generics, GenericsDiff};
+
+const NO_SRC_ERROR: &str = "No source text for trait, was parse logic changed?";
 
 #[derive(Debug)]
 pub struct Traits(pub Vec<Trait>);
@@ -285,14 +287,16 @@ impl Display for TraitDiff {
                             .old
                             .as_ref()
                             .unwrap()
-                            .to_token_stream()
-                            .to_string();
+                            .span()
+                            .source_text()
+                            .expect(NO_SRC_ERROR);
                         let new_item_source = item_diff
                             .new
                             .as_ref()
                             .unwrap()
-                            .to_token_stream()
-                            .to_string();
+                            .span()
+                            .source_text()
+                            .expect(NO_SRC_ERROR);
                         old_items.push(format!("- {old_item_source}",));
                         new_items.push(format!("+ {new_item_source}",));
                     }
@@ -313,8 +317,12 @@ impl Display for TraitDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd.param().unwrap().to_token_stream().to_string();
-                    // let param_source = get_source(vec![Item::Verbatim(param_tokens)]);
+                    let param_source = pd
+                        .param()
+                        .unwrap()
+                        .span()
+                        .source_text()
+                        .expect(NO_SRC_ERROR);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
                         ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
@@ -334,9 +342,12 @@ impl Display for TraitDiff {
                 match wd.change() {
                     Change::Existence(ex) => {
                         // where clause was added or deleted wholesale
-                        let where_clause_source =
-                            wd.where_clause().unwrap().to_token_stream().to_string();
-                        // let where_clause_source = get_source(vec![Item::Verbatim(where_clause)]);
+                        let where_clause_source = wd
+                            .where_clause()
+                            .unwrap()
+                            .span()
+                            .source_text()
+                            .expect(NO_SRC_ERROR);
                         match ex {
                             ExistenceChange::Deleted => {
                                 left_column.push(format!("- {where_clause_source}"));
@@ -355,10 +366,12 @@ impl Display for TraitDiff {
                         let mut new_predicates = Vec::new();
 
                         for pred_diff in predicate_diffs.iter() {
-                            let predicate_source =
-                                pred_diff.predicate().unwrap().to_token_stream().to_string();
-                            // let predicate_source =
-                            //     get_source(vec![Item::Verbatim(predicate_tokens)]);
+                            let predicate_source = pred_diff
+                                .predicate()
+                                .unwrap()
+                                .span()
+                                .source_text()
+                                .expect(NO_SRC_ERROR);
                             match pred_diff.change() {
                                 ExistenceChange::Deleted => {
                                     old_predicates.push(format!("- {predicate_source}",))
