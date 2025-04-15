@@ -5,10 +5,10 @@ use std::fmt::{
 use syn::{
     spanned::Spanned,
     token::{Async, Const, Unsafe},
-    Abi, FnArg, ImplItemFn, ItemFn, ReturnType,
+    Abi, FnArg, ImplItemFn, ItemFn, ReturnType, Visibility,
 };
 
-use crate::{Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
+use crate::{Change, Diff, ExistenceChange, SourceFile, VisDiff};
 
 use super::generics::{Generics, GenericsDiff};
 
@@ -99,7 +99,7 @@ impl Diff for Functions {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Function {
-    vis: Vis,
+    vis: Visibility,
     r#const: Option<Const>,
     r#async: Option<Async>,
     r#unsafe: Option<Unsafe>,
@@ -114,7 +114,7 @@ pub struct Function {
 impl Function {
     pub fn new_freestanding(f: ItemFn, source: SourceFile) -> Self {
         Function {
-            vis: f.vis.clone().into(),
+            vis: f.vis.clone(),
             r#const: f.sig.constness,
             r#async: f.sig.asyncness,
             r#unsafe: f.sig.unsafety,
@@ -267,8 +267,10 @@ impl Display for FunctionDiff {
         if let Some(vd) = &self.vis_diff {
             left_column.push("\nvisibility:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", vd.old));
-            right_column.push(format!("+ {}", vd.new));
+            let old_vis = vd.old.span().source_text();
+            let new_vis = vd.new.span().source_text();
+            left_column.push(format!("- {}", old_vis.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_vis.as_deref().unwrap_or("(none)")));
         }
 
         // old and new const modifiers, if any

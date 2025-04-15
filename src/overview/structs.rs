@@ -4,9 +4,9 @@ use std::{
 };
 
 use colored::Colorize;
-use syn::{spanned::Spanned, ItemStruct};
+use syn::{spanned::Spanned, ItemStruct, Visibility};
 
-use crate::{Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
+use crate::{Change, Diff, ExistenceChange, SourceFile, VisDiff};
 
 use super::{
     fields::{Fields, FieldsDiff},
@@ -91,11 +91,10 @@ impl Deref for Structs {
         &self.0
     }
 }
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Struct {
     name: String,
-    vis: Vis,
+    vis: Visibility,
     fields: Fields,
     generics: Generics,
     original: ItemStruct,
@@ -104,7 +103,7 @@ pub struct Struct {
 impl Struct {
     pub fn new(s: ItemStruct, source: SourceFile) -> Self {
         let original = s.clone();
-        let vis: Vis = s.vis.into();
+        let vis = s.vis;
         let name = s.ident.to_string();
         let fields = s.fields.into_iter().collect();
         let fields = Fields(fields);
@@ -155,7 +154,8 @@ impl Diff for Struct {
 }
 impl Display for Struct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} struct {}", self.vis.as_str(), self.name)
+        let vis = self.vis.span().source_text().unwrap();
+        write!(f, "{vis} struct {}", self.name)
     }
 }
 
@@ -275,8 +275,10 @@ impl Display for StructDiff {
         if let Some(vd) = &self.vis_diff {
             left_column.push("\nvisibility:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", vd.old));
-            right_column.push(format!("+ {}", vd.new));
+            let old_vis = vd.old.span().source_text();
+            let new_vis = vd.new.span().source_text();
+            left_column.push(format!("- {}", old_vis.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_vis.as_deref().unwrap_or("(none)")));
         }
 
         if let Some(fd) = &self.fields_diff {

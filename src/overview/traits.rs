@@ -4,9 +4,9 @@ use std::{
 };
 
 use quote::ToTokens;
-use syn::{spanned::Spanned, Item, ItemTrait, TraitItem};
+use syn::{spanned::Spanned, Item, ItemTrait, TraitItem, Visibility};
 
-use crate::{get_source, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
+use crate::{get_source, Change, Diff, ExistenceChange, SourceFile, VisDiff};
 
 use super::generics::{Generics, GenericsDiff};
 
@@ -88,7 +88,7 @@ impl Deref for Traits {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Trait {
     name: String,
-    vis: Vis,
+    vis: Visibility,
     generics: Generics,
     items: Vec<TraitItem>,
     original: ItemTrait,
@@ -98,7 +98,7 @@ impl Trait {
     pub fn new(t: ItemTrait, source: SourceFile) -> Self {
         let original = t.clone();
         let name = t.ident.to_string();
-        let vis = t.vis.into();
+        let vis = t.vis;
         let generics = Generics::from(t.generics);
         let items = t.items;
         Trait {
@@ -248,8 +248,10 @@ impl Display for TraitDiff {
         if let Some(vd) = &self.vis_diff {
             left_column.push("\nvisibility:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", vd.old));
-            right_column.push(format!("+ {}", vd.new));
+            let old_vis = vd.old.span().source_text().unwrap();
+            let new_vis = vd.new.span().source_text().unwrap();
+            left_column.push(format!("- {old_vis}"));
+            right_column.push(format!("+ {new_vis}"));
         }
 
         if let Some(items_diff) = &self.items_diff {

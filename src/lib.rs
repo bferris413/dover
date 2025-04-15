@@ -392,23 +392,7 @@ fn get_source(items: Vec<Item>) -> String {
 
     prettyplease::unparse(&syn_file)
 }
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub enum Vis {
-    Public,
-    Restricted,
-    Inherited,
-}
-impl Vis {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Vis::Public => "pub",
-            Vis::Restricted => "pub(..)",
-            Vis::Inherited => "(none)",
-        }
-    }
-}
-impl Diff for Vis {
+impl Diff for Visibility {
     type Diff = Option<VisDiff>;
     fn diff_with(&self, other: &Self) -> Self::Diff {
         if self == other {
@@ -416,30 +400,16 @@ impl Diff for Vis {
         }
 
         Some(VisDiff {
-            old: *self,
-            new: *other,
+            old: self.clone(),
+            new: other.clone(),
         })
-    }
-}
-impl Display for Vis {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-impl From<Visibility> for Vis {
-    fn from(vis: Visibility) -> Self {
-        match vis {
-            Visibility::Public(_) => Vis::Public,
-            Visibility::Restricted(_) => Vis::Restricted,
-            Visibility::Inherited => Vis::Inherited,
-        }
     }
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct VisDiff {
-    pub old: Vis,
-    pub new: Vis,
+    pub old: Visibility,
+    pub new: Visibility,
 }
 
 /// Cheaply cloneable reference to the original source.

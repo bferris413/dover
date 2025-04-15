@@ -3,9 +3,9 @@ use std::{
     ops::Deref,
 };
 
-use syn::{spanned::Spanned, ItemEnum};
+use syn::{spanned::Spanned, ItemEnum, Visibility};
 
-use crate::{format_as_columns, Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};
+use crate::{format_as_columns, Change, Diff, ExistenceChange, SourceFile, VisDiff};
 
 use super::{
     generics::{Generics, GenericsDiff},
@@ -94,7 +94,7 @@ impl Deref for Enums {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Enum {
     name: String,
-    vis: Vis,
+    vis: Visibility,
     variants: Variants,
     generics: Generics,
     original: ItemEnum,
@@ -153,7 +153,8 @@ impl Diff for Enum {
 }
 impl Display for Enum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} struct {}", self.vis.as_str(), self.name)
+        let vis = self.vis.span().source_text().unwrap();
+        write!(f, "{vis} struct {}", self.name)
     }
 }
 
@@ -273,8 +274,10 @@ impl Display for EnumDiff {
         if let Some(vd) = &self.vis_diff {
             left_column.push("\nvisibility:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", vd.old));
-            right_column.push(format!("+ {}", vd.new));
+            let old_vis = vd.old.span().source_text();
+            let new_vis = vd.new.span().source_text();
+            left_column.push(format!("- {}", old_vis.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_vis.as_deref().unwrap_or("(none)")));
         }
 
         if let Some(vd) = &self.variants_diff {

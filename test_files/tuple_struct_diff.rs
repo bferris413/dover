@@ -1,24 +1,26 @@
 // use cake::cheese::eggs;
 // use rice;
 
-const unsafe fn run(i: u32) -> std::u32::u32 {
-    i
-}
+// const unsafe fn run(i: u32) -> std::u32::u32 {
+//     i
+// }
 
 fn build() -> u32 {
     todo!()
 }
+//
+// pub struct Struct1(String);
 
-struct Struct2;
-struct Struct1 {
-    field1: u32,
-    field2: String,
-}
-impl Struct1 {
-    fn new(field1: u32, field2: String) -> Self {
-        Self { field1, field2 }
-    }
-}
+// struct Struct2;
+// struct Struct1 {
+//     field1: u32,
+//     field2: String,
+// }
+// impl Struct1 {
+//     fn new(field1: u32, field2: String) -> Self {
+//         Self { field1, field2 }
+//     }
+// }
 //struct Struct3;
 
 // trait Milkshake {
