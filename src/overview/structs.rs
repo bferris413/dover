@@ -3,6 +3,7 @@ use std::{
     ops::Deref,
 };
 
+use colored::Colorize;
 use syn::{spanned::Spanned, ItemStruct};
 
 use crate::{Change, Diff, ExistenceChange, SourceFile, Vis, VisDiff};

@@ -1,4 +1,5 @@
 use crate::{Diff, ExistenceChange};
+use colored::Colorize;
 use std::{
     fmt::{Display, Write},
     ops::Deref,

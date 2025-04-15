@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.95"
 clap = { version = "4.5.27", features = ["derive"] }
+colored = "3.0.0"
 git2 = "0.20.0"
 prettyplease = { version = "0.2.29", features = ["verbatim"] }
 proc-macro2 = { version = "1.0.94", features = ["span-locations"] }

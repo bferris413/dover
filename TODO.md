@@ -2,13 +2,7 @@
 - Summary stats at top
 - Compare between two branches.
 - Figure out sensible defaults for add/remove files
-- Identify freestanding function signature pieces
 - Refactor old/new pattern to use single underlying type
-- struct impl - fn
-- trait impl - fn
-- enum impl - fn
-- "fragment" formatter
-- probably need to add attributes for all items
 - colored output
 - impl item - const
 - impl item - macro
@@ -18,13 +12,19 @@
 - attributes - struct
 - attributes - trait
 - attributes - module
+- probably need to add attributes for all items
 - From<ImplItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
-- use proc-macro2 for the initial parse (this gives us line info that syn::parse doesn't give)
+- "fragment" formatter
 
 -- BUG --------------------------------------------------------------------------
 - struct fields assume order matters, but this is only relevant for tuple structs
 
 -- DONE ------------------------------------------------------------------------
+- done - Identify freestanding function signature pieces
+- done - struct impl - fn
+- done - trait impl - fn
+- done - enum impl - fn
+- done - use proc-macro2 for the initial parse (this gives us line info that syn::parse doesn't give)
 - done - Compare between two commits.
 - done - Freestanding functions
 - done - traits
