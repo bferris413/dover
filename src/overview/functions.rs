@@ -370,6 +370,69 @@ impl View for FunctionDiff {
         }])
     }
 }
+impl ByteRange for FunctionDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let mut old_ranges = Vec::new();
+
+        if let Some(ref vis_diff) = self.vis_diff {
+            old_ranges.append(&mut vis_diff.old_ranges());
+        }
+        if let Some(ref const_diff) = self.const_diff {
+            old_ranges.append(&mut const_diff.old_ranges());
+        }
+        if let Some(ref async_diff) = self.async_diff {
+            old_ranges.append(&mut async_diff.old_ranges());
+        }
+        if let Some(ref unsafe_diff) = self.unsafe_diff {
+            old_ranges.append(&mut unsafe_diff.old_ranges());
+        }
+        if let Some(ref abi_diff) = self.abi_diff {
+            old_ranges.append(&mut abi_diff.old_ranges());
+        }
+        if let Some(ref generics_diff) = self.generics_diff {
+            old_ranges.append(&mut generics_diff.old_ranges());
+        }
+        if let Some(ref inputs_diff) = self.inputs_diff {
+            old_ranges.append(&mut inputs_diff.old_ranges());
+        }
+        if let Some(ref return_type_diff) = self.return_type_diff {
+            old_ranges.append(&mut return_type_diff.old_ranges());
+        }
+
+        old_ranges
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let mut new_ranges = Vec::new();
+
+        if let Some(ref abi_diff) = self.abi_diff {
+            new_ranges.append(&mut abi_diff.new_ranges());
+        }
+        if let Some(ref vis_diff) = self.vis_diff {
+            new_ranges.append(&mut vis_diff.new_ranges());
+        }
+        if let Some(ref const_diff) = self.const_diff {
+            new_ranges.append(&mut const_diff.new_ranges());
+        }
+        if let Some(ref async_diff) = self.async_diff {
+            new_ranges.append(&mut async_diff.new_ranges());
+        }
+        if let Some(ref unsafe_diff) = self.unsafe_diff {
+            new_ranges.append(&mut unsafe_diff.new_ranges());
+        }
+        if let Some(ref generics_diff) = self.generics_diff {
+            new_ranges.append(&mut generics_diff.new_ranges());
+        }
+        if let Some(ref inputs_diff) = self.inputs_diff {
+            new_ranges.append(&mut inputs_diff.new_ranges());
+        }
+        if let Some(ref return_type_diff) = self.return_type_diff {
+            new_ranges.append(&mut return_type_diff.new_ranges());
+        }
+
+        new_ranges
+    }
+}
 
 fn remove_block(mut source: String) -> String {
     let block_start = source.find("{");
@@ -511,6 +574,23 @@ impl View for FunctionsDiff {
         }
 
         viewables
+    }
+}
+impl ByteRange for FunctionsDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        self.diffs
+            .iter()
+            .map(|diff| diff.old_ranges())
+            .flatten()
+            .collect()
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        self.diffs
+            .iter()
+            .map(|diff| diff.new_ranges())
+            .flatten()
+            .collect()
     }
 }
 impl FunctionsDiff {

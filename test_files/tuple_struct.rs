@@ -26,13 +26,13 @@ fn eggs() {}
 //     STUN,
 // }
 
-// struct Struct;
+struct Struct;
 // struct Struct1;
-// impl Struct1 {
-//     fn new(field2: u64) -> Self {
-//         Self
-//     }
-// }
+impl Struct1 {
+    fn new(field2: u64) -> Self {
+        Self
+    }
+}
 
 // pub struct Thing<T, U, V: Clone, W, X>
 // where

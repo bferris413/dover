@@ -54,6 +54,10 @@ impl ViewableDiffs {
         self.vds.append(&mut diffs.vds);
     }
     pub fn collapse(&mut self) {
+        if self.vds.is_empty() {
+            return;
+        }
+
         let mut collapsed_old = Vec::new();
         let mut collapsed_new = Vec::new();
 
@@ -84,15 +88,16 @@ impl Display for ViewableDiffs {
 
         // ---------------------------------------------------------------------------------
         // | None of this is optimized for readability or efficiency. It's barely working. |
+        //                                                                                 |
+        //   Edit: A recent bug reminded me how terrible this section is to work in. It    |
+        //         needs a complete rewrite.                                               |
         // ---------------------------------------------------------------------------------
         let (mut old_col, mut new_col) = (Vec::new(), Vec::new());
 
         let old_col_max_width = {
             let mut cur_max = DEFAULT_MAX_COL_W;
             for vd in self.vds.iter() {
-                dbg!(cur_max);
                 if let Some(ref old) = vd.old {
-                    println!("was old");
                     let all_strings: Vec<_> = old.iter().map(|(_, c)| c.0.clone()).collect();
                     let string = all_strings.join("");
                     let local_max = string.lines().map(|l| l.len()).max().unwrap_or(0);
@@ -101,8 +106,6 @@ impl Display for ViewableDiffs {
             }
             cur_max
         };
-
-        dbg!(old_col_max_width);
 
         for vd in self.vds.iter() {
             let (mut old_section, mut new_section) = (Vec::new(), Vec::new());
@@ -113,22 +116,22 @@ impl Display for ViewableDiffs {
                     let mut plain_running_len = 0;
                     for (change, code) in old {
                         if code.0.contains("\n") {
-                            let mut lines = code.0.lines();
+                            let mut lines = code.0.lines().peekable();
                             let next = lines.next().unwrap();
                             match change {
                                 Some(ExistenceChange::Deleted) => {
-                                    println!("writing {}", next.red());
+                                    println!("writing old del(1) {}", next.red());
                                     plain_running_len += next.len();
                                     write!(running_string, "{}", next.red())?;
                                 }
                                 Some(ExistenceChange::Added) => panic!(),
                                 None => {
-                                    println!("writing {}", next.normal());
+                                    println!("writing old nil(1) {}", next.normal());
                                     plain_running_len += next.len();
                                     write!(running_string, "{}", next.normal())?;
                                 }
                             }
-                            println!("pushing {running_string}");
+                            println!("pushing old(1) {running_string}");
                             while plain_running_len < old_col_max_width {
                                 running_string.push(' ');
                                 plain_running_len += 1;
@@ -136,33 +139,53 @@ impl Display for ViewableDiffs {
                             colored_string.push(running_string.clone());
                             running_string.clear();
                             plain_running_len = 0;
-                            for line in lines {
+                            while let Some(line) = lines.next() {
                                 match change {
                                     Some(ExistenceChange::Deleted) => {
-                                        println!("pushing {}", line.red());
-                                        let gap = old_col_max_width.saturating_sub(line.len());
-                                        let line = format!("{line}{}", " ".repeat(gap));
-                                        colored_string.push(line.red().to_string());
+                                        if lines.peek().is_some()
+                                            || (lines.peek().is_none()
+                                                && code.0.trim_end_matches(" ").ends_with('\n'))
+                                        {
+                                            println!("pushing old del(1) {}", line.red());
+                                            let gap = old_col_max_width.saturating_sub(line.len());
+                                            let line = format!("{line}{}", " ".repeat(gap));
+                                            colored_string.push(line.red().to_string());
+                                        } else {
+                                            // the last piece and not terminated with \n
+                                            println!("writing old del (2){}", line.red());
+                                            plain_running_len += line.len();
+                                            write!(running_string, "{}", line.red())?;
+                                        }
                                     }
                                     Some(ExistenceChange::Added) => panic!(),
                                     None => {
-                                        println!("pushing {}", line.normal());
-                                        let gap = old_col_max_width.saturating_sub(line.len());
-                                        let line = format!("{line}{}", " ".repeat(gap));
-                                        colored_string.push(line.normal().to_string())
+                                        if lines.peek().is_some()
+                                            || (lines.peek().is_none()
+                                                && code.0.trim_end_matches(" ").ends_with('\n'))
+                                        {
+                                            println!("pushing old nil(1) {}", line.normal());
+                                            let gap = old_col_max_width.saturating_sub(line.len());
+                                            let line = format!("{line}{}", " ".repeat(gap));
+                                            colored_string.push(line.normal().to_string())
+                                        } else {
+                                            // the last piece and not terminated with \n
+                                            println!("writing old nil (2){}", line.normal());
+                                            plain_running_len += line.len();
+                                            write!(running_string, "{}", line.normal())?;
+                                        }
                                     }
                                 }
                             }
                         } else {
                             match change {
                                 Some(ExistenceChange::Deleted) => {
-                                    println!("writing {}", code.0.red());
+                                    println!("writing old del(3) {}", code.0.red());
                                     plain_running_len += code.0.len();
                                     write!(running_string, "{}", code.0.red())?;
                                 }
                                 Some(ExistenceChange::Added) => panic!(),
                                 None => {
-                                    println!("writing {}", code.0.normal());
+                                    println!("writing old nil(3){}", code.0.normal());
                                     plain_running_len += code.0.len();
                                     write!(running_string, "{}", code.0.normal())?;
                                 }
@@ -171,6 +194,10 @@ impl Display for ViewableDiffs {
                     }
 
                     if !running_string.is_empty() {
+                        while plain_running_len < old_col_max_width {
+                            running_string.push(' ');
+                            plain_running_len += 1;
+                        }
                         colored_string.push(running_string);
                     }
 
@@ -187,7 +214,7 @@ impl Display for ViewableDiffs {
                     let mut running_string = String::new();
                     for (change, code) in new {
                         if code.0.contains("\n") {
-                            let mut lines = code.0.lines();
+                            let mut lines = code.0.lines().peekable();
                             let next = lines.next().unwrap();
                             match change {
                                 Some(ExistenceChange::Added) => {
@@ -203,16 +230,34 @@ impl Display for ViewableDiffs {
                             println!("pushing {running_string}");
                             colored_string.push(running_string.clone());
                             running_string.clear();
-                            for line in lines {
+                            while let Some(line) = lines.next() {
                                 match change {
                                     Some(ExistenceChange::Added) => {
-                                        println!("pushing {}", line.green());
-                                        colored_string.push(line.green().to_string());
+                                        if lines.peek().is_some()
+                                            || (lines.peek().is_none()
+                                                && code.0.trim_end_matches(" ").ends_with('\n'))
+                                        {
+                                            println!("pushing {}", line.green());
+                                            colored_string.push(line.green().to_string());
+                                        } else {
+                                            // the last piece and not terminated with \n
+                                            println!("writing new add (2){}", line.green());
+                                            write!(running_string, "{}", line.green())?;
+                                        }
                                     }
                                     Some(ExistenceChange::Deleted) => panic!(),
                                     None => {
-                                        println!("pushing {}", line.normal());
-                                        colored_string.push(line.normal().to_string())
+                                        if lines.peek().is_some()
+                                            || (lines.peek().is_none()
+                                                && code.0.trim_end_matches(" ").ends_with('\n'))
+                                        {
+                                            println!("pushing {}", line.normal());
+                                            colored_string.push(line.normal().to_string())
+                                        } else {
+                                            // the last piece and not terminated with \n
+                                            println!("writing new nil (2){}", line.normal());
+                                            write!(running_string, "{}", line.normal())?;
+                                        }
                                     }
                                 }
                             }
@@ -561,8 +606,9 @@ impl Display for OverviewDiff {
         }
 
         if !self.impls_diff.is_empty() {
+            let viewable_impls = self.impls_diff.as_viewable();
             writeln!(&mut string_builder, "{}", underlined("Impls"))?;
-            writeln!(&mut string_builder, "{}", self.impls_diff)?;
+            writeln!(&mut string_builder, "{viewable_impls}",)?;
         }
 
         while string_builder.ends_with('\n') {
