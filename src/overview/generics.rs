@@ -1,11 +1,14 @@
-use syn::{GenericParam, Generics as SynGenerics, WhereClause, WherePredicate};
+use std::ops::Range;
 
-use crate::{Change, Diff, ExistenceChange};
+use syn::{spanned::Spanned, GenericParam, Generics as SynGenerics, WhereClause, WherePredicate};
+
+use crate::{ByteRange, Change, Diff, ExistenceChange};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Generics {
     params: Vec<GenericParam>,
     where_clause: Option<WhereClause>,
+    original: SynGenerics,
 }
 impl Diff for Generics {
     type Diff = Option<GenericsDiff>;
@@ -26,6 +29,8 @@ impl Diff for Generics {
         let diff = GenericsDiff {
             params_diff,
             where_diff,
+            old: self.original.clone(),
+            new: other.original.clone(),
         };
 
         Some(diff)
@@ -33,11 +38,12 @@ impl Diff for Generics {
 }
 impl From<SynGenerics> for Generics {
     fn from(generics: syn::Generics) -> Self {
-        let params = generics.params.into_iter().collect();
-        let where_clause = generics.where_clause;
+        let params = generics.params.iter().map(|p| p.clone()).collect();
+        let where_clause = generics.where_clause.clone();
         Self {
             params,
             where_clause,
+            original: generics,
         }
     }
 }
@@ -58,7 +64,7 @@ impl Diff for Vec<GenericParam> {
                 let change = ExistenceChange::Deleted;
                 let diff = GenericParamDiff {
                     change,
-                    param: Some(old_param.clone()),
+                    param: old_param.clone(),
                 };
                 param_diffs.push(diff);
             }
@@ -69,7 +75,7 @@ impl Diff for Vec<GenericParam> {
                 let change = ExistenceChange::Added;
                 let diff = GenericParamDiff {
                     change,
-                    param: Some(new_param.clone()),
+                    param: new_param.clone(),
                 };
                 param_diffs.push(diff);
             }
@@ -115,7 +121,7 @@ impl Diff for Option<WhereClause> {
                         let change = ExistenceChange::Deleted;
                         let diff = PredicateDiff {
                             change,
-                            predicate: Some(predicate.clone()),
+                            predicate: predicate.clone(),
                         };
                         predicate_diffs.push(diff);
                     }
@@ -125,7 +131,7 @@ impl Diff for Option<WhereClause> {
                         let change = ExistenceChange::Added;
                         let diff = PredicateDiff {
                             change,
-                            predicate: Some(predicate.clone()),
+                            predicate: predicate.clone(),
                         };
                         predicate_diffs.push(diff);
                     }
@@ -143,25 +149,83 @@ impl Diff for Option<WhereClause> {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct PredicateDiff {
     change: ExistenceChange,
-    predicate: Option<WherePredicate>,
+    predicate: WherePredicate,
+}
+impl ByteRange for PredicateDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let ExistenceChange::Deleted = self.change else {
+            return Vec::new();
+        };
+
+        let old_range = self.predicate.span().byte_range();
+        vec![old_range]
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let ExistenceChange::Added = self.change else {
+            return Vec::new();
+        };
+
+        let new_range = self.predicate.span().byte_range();
+        vec![new_range]
+    }
 }
 impl PredicateDiff {
     pub fn change(&self) -> ExistenceChange {
         self.change
     }
-    pub fn predicate(&self) -> Option<&WherePredicate> {
-        self.predicate.as_ref()
+    pub fn predicate(&self) -> &WherePredicate {
+        &self.predicate
     }
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct GenericsDiff {
     params_diff: Option<Vec<GenericParamDiff>>,
     where_diff: Option<WhereClauseDiff>,
+    old: SynGenerics,
+    new: SynGenerics,
+}
+impl ByteRange for GenericsDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let mut old_ranges = Vec::new();
+
+        if let Some(params_diff) = &self.params_diff {
+            params_diff
+                .iter()
+                .for_each(|gpd| old_ranges.append(&mut gpd.old_ranges()));
+
+            old_ranges.push(self.old.span().byte_range());
+        };
+
+        if let Some(where_diff) = &self.where_diff() {
+            let mut where_ranges = where_diff.old_ranges();
+            old_ranges.append(&mut where_ranges);
+        }
+
+        old_ranges
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let mut new_ranges = Vec::new();
+
+        if let Some(params_diff) = &self.params_diff {
+            params_diff
+                .iter()
+                .for_each(|gpd| new_ranges.append(&mut gpd.new_ranges()));
+
+            new_ranges.push(self.new.span().byte_range());
+        };
+
+        if let Some(where_diff) = &self.where_diff() {
+            let mut where_ranges = where_diff.new_ranges();
+            new_ranges.append(&mut where_ranges);
+        }
+
+        new_ranges
+    }
 }
 impl GenericsDiff {
     pub fn params_diff(&self) -> Option<&Vec<GenericParamDiff>> {
@@ -173,26 +237,104 @@ impl GenericsDiff {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct GenericParamDiff {
     change: ExistenceChange,
-    param: Option<GenericParam>,
+    param: GenericParam,
+}
+impl ByteRange for GenericParamDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        match self.change {
+            ExistenceChange::Added => Vec::new(),
+            ExistenceChange::Deleted => {
+                let old_range = self.param.span().byte_range();
+                if !old_range.is_empty() {
+                    vec![old_range]
+                } else {
+                    Vec::new()
+                }
+            }
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        match self.change {
+            ExistenceChange::Added => {
+                let new_range = self.param.span().byte_range();
+                if !new_range.is_empty() {
+                    vec![new_range]
+                } else {
+                    Vec::new()
+                }
+            }
+            ExistenceChange::Deleted => Vec::new(),
+        }
+    }
 }
 impl GenericParamDiff {
     pub fn change(&self) -> ExistenceChange {
         self.change
     }
-    pub fn param(&self) -> Option<&GenericParam> {
-        self.param.as_ref()
+    pub fn param(&self) -> &GenericParam {
+        &self.param
     }
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct WhereClauseDiff {
     change: Change,
     where_clause: Option<WhereClause>,
     predicates: Option<Vec<PredicateDiff>>,
+}
+impl ByteRange for WhereClauseDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        match self.change {
+            Change::Existence(ex) => {
+                // this isn't expressed cleanly in the struct yet, just needs design
+                assert!(self.where_clause.is_some());
+                let wc = &self.where_clause.as_ref().unwrap();
+                match ex {
+                    ExistenceChange::Added => Vec::new(),
+                    ExistenceChange::Deleted => vec![wc.span().byte_range()],
+                }
+            }
+            Change::Modified => {
+                assert!(self.predicates.is_some());
+                let predicates = self.predicates.as_ref().unwrap();
+                let mut old_ranges = Vec::new();
+
+                predicates
+                    .iter()
+                    .for_each(|pd| old_ranges.append(&mut pd.old_ranges()));
+
+                old_ranges
+            }
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        match self.change {
+            Change::Existence(ex) => {
+                // this isn't expressed cleanly in the struct yet, just needs design
+                assert!(self.where_clause.is_some());
+                let wc = &self.where_clause.as_ref().unwrap();
+                match ex {
+                    ExistenceChange::Added => Vec::new(),
+                    ExistenceChange::Deleted => vec![wc.span().byte_range()],
+                }
+            }
+            Change::Modified => {
+                assert!(self.predicates.is_some());
+                let predicates = self.predicates.as_ref().unwrap();
+                let mut new_ranges = Vec::new();
+
+                predicates
+                    .iter()
+                    .for_each(|pd| new_ranges.append(&mut pd.new_ranges()));
+
+                new_ranges
+            }
+        }
+    }
 }
 
 impl WhereClauseDiff {

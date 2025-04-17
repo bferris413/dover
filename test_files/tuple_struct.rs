@@ -1,8 +1,20 @@
 // use cake::cheese;
 
-pub fn build<T: Clone>(i: u32, y: T) -> T {
+pub fn build<T: Clone>(i: u32, y: T) -> T
+where
+    X: Milk,
+    V: Cake,
+{
     i
 }
+
+// pub fn doit() {
+//     println!("yes");
+// }
+
+fn cake() {}
+
+fn eggs() {}
 
 // trait Milkshake {
 //     fn cheese(&self) -> cheese::Cheese;

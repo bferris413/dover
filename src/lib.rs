@@ -1,13 +1,16 @@
 use std::fmt::{Display, Write};
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use colored::{Colorize, CustomColor};
 use overview::enums::{Enum, Enums, EnumsDiff};
 use overview::functions::{Functions, FunctionsDiff};
 use overview::impls::{Impls, ImplsDiff};
 use overview::traits::{Trait, Traits, TraitsDiff};
+use syn::spanned::Spanned;
 use syn::{File, Item, ItemFn};
 use syn::{ItemUse, Visibility};
 
@@ -19,10 +22,268 @@ mod overview;
 
 pub use git::{get_changed_files, Change as GitChange, ChangedFile, Treeish};
 
+const DEFAULT_MAX_COL_W: usize = 50;
+
+pub trait ByteRange {
+    fn old_ranges(&self) -> Vec<Range<usize>>;
+    fn new_ranges(&self) -> Vec<Range<usize>>;
+}
+
 /// Diff an item with another and return the result.
 pub trait Diff {
     type Diff;
     fn diff_with(&self, other: &Self) -> Self::Diff;
+}
+
+pub trait View {
+    fn as_viewable(&self) -> ViewableDiffs;
+}
+
+#[derive(Debug)]
+pub struct ViewableDiffs {
+    vds: Vec<ViewableDiff>,
+}
+impl ViewableDiffs {
+    pub fn new(diffs: Vec<ViewableDiff>) -> Self {
+        ViewableDiffs { vds: diffs }
+    }
+    pub fn empty() -> ViewableDiffs {
+        Self { vds: Vec::new() }
+    }
+    pub fn append(&mut self, mut diffs: ViewableDiffs) {
+        self.vds.append(&mut diffs.vds);
+    }
+    pub fn collapse(&mut self) {
+        let mut collapsed_old = Vec::new();
+        let mut collapsed_new = Vec::new();
+
+        for diff in self.vds.iter_mut() {
+            if let Some(ref mut old) = diff.old {
+                collapsed_old.append(old);
+            }
+            if let Some(ref mut new) = diff.new {
+                collapsed_new.append(new);
+            }
+        }
+
+        let mut old = None;
+        let mut new = None;
+        if !collapsed_old.is_empty() {
+            old = Some(collapsed_old);
+        }
+        if !collapsed_new.is_empty() {
+            new = Some(collapsed_new);
+        }
+
+        self.vds = vec![ViewableDiff { old, new }];
+    }
+}
+impl Display for ViewableDiffs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // dbg!(self);
+        //
+        // None of this is optimized for readability or efficiency. It's barely working.
+
+        let (mut old_col, mut new_col) = (Vec::new(), Vec::new());
+
+        let old_col_max_width = {
+            let mut cur_max = DEFAULT_MAX_COL_W;
+            for vd in self.vds.iter() {
+                dbg!(cur_max);
+                if let Some(ref old) = vd.old {
+                    println!("was old");
+                    let all_strings: Vec<_> = old.iter().map(|(_, c)| c.0.clone()).collect();
+                    let string = all_strings.join("");
+                    let local_max = string.lines().map(|l| dbg!(l.len())).max().unwrap_or(0);
+                    cur_max = cur_max.max(local_max);
+                }
+            }
+            cur_max
+        };
+
+        dbg!(old_col_max_width);
+
+        for vd in self.vds.iter() {
+            let (mut old_section, mut new_section) = (Vec::new(), Vec::new());
+            match &vd.old {
+                Some(old) => {
+                    let mut colored_string = Vec::new();
+                    let mut running_string = String::new();
+                    let mut plain_running_len = 0;
+                    for (change, code) in old {
+                        if code.0.contains("\n") {
+                            let mut lines = code.0.lines();
+                            let next = lines.next().unwrap();
+                            match change {
+                                Some(ExistenceChange::Deleted) => {
+                                    println!("writing {}", next.red());
+                                    plain_running_len += next.len();
+                                    write!(running_string, "{}", next.red())?;
+                                }
+                                Some(ExistenceChange::Added) => panic!(),
+                                None => {
+                                    println!("writing {}", next.normal());
+                                    plain_running_len += next.len();
+                                    write!(running_string, "{}", next.normal())?;
+                                }
+                            }
+                            println!("pushing {running_string}");
+                            while plain_running_len < old_col_max_width {
+                                running_string.push(' ');
+                                plain_running_len += 1;
+                            }
+                            colored_string.push(running_string.clone());
+                            running_string.clear();
+                            plain_running_len = 0;
+                            for line in lines {
+                                match change {
+                                    Some(ExistenceChange::Deleted) => {
+                                        println!("pushing {}", line.red());
+                                        let gap = old_col_max_width.saturating_sub(line.len());
+                                        let line = format!("{line}{}", " ".repeat(gap));
+                                        colored_string.push(line.red().to_string());
+                                    }
+                                    Some(ExistenceChange::Added) => panic!(),
+                                    None => {
+                                        println!("pushing {}", line.normal());
+                                        let gap = old_col_max_width.saturating_sub(line.len());
+                                        let line = format!("{line}{}", " ".repeat(gap));
+                                        colored_string.push(line.normal().to_string())
+                                    }
+                                }
+                            }
+                        } else {
+                            match change {
+                                Some(ExistenceChange::Deleted) => {
+                                    println!("writing {}", code.0.red());
+                                    plain_running_len += code.0.len();
+                                    write!(running_string, "{}", code.0.red())?;
+                                }
+                                Some(ExistenceChange::Added) => panic!(),
+                                None => {
+                                    println!("writing {}", code.0.normal());
+                                    plain_running_len += code.0.len();
+                                    write!(running_string, "{}", code.0.normal())?;
+                                }
+                            }
+                        }
+                    }
+
+                    if !running_string.is_empty() {
+                        colored_string.push(running_string);
+                    }
+
+                    for line in colored_string.into_iter() {
+                        old_section.push(line);
+                    }
+                }
+                None => {}
+            }
+
+            match &vd.new {
+                Some(new) => {
+                    let mut colored_string = Vec::new();
+                    let mut running_string = String::new();
+                    for (change, code) in new {
+                        if code.0.contains("\n") {
+                            let mut lines = code.0.lines();
+                            let next = lines.next().unwrap();
+                            match change {
+                                Some(ExistenceChange::Added) => {
+                                    println!("writing {}", next.green());
+                                    write!(running_string, "{}", next.green())?;
+                                }
+                                Some(ExistenceChange::Deleted) => panic!(),
+                                None => {
+                                    println!("writing {}", next.normal());
+                                    write!(running_string, "{}", next.normal())?;
+                                }
+                            }
+                            println!("pushing {running_string}");
+                            colored_string.push(running_string.clone());
+                            running_string.clear();
+                            for line in lines {
+                                match change {
+                                    Some(ExistenceChange::Added) => {
+                                        println!("pushing {}", line.green());
+                                        colored_string.push(line.green().to_string());
+                                    }
+                                    Some(ExistenceChange::Deleted) => panic!(),
+                                    None => {
+                                        println!("pushing {}", line.normal());
+                                        colored_string.push(line.normal().to_string())
+                                    }
+                                }
+                            }
+                        } else {
+                            match change {
+                                Some(ExistenceChange::Added) => {
+                                    println!("writing {}", code.0.green());
+                                    write!(running_string, "{}", code.0.green())?;
+                                }
+                                Some(ExistenceChange::Deleted) => panic!(),
+                                None => {
+                                    println!("writing {}", code.0.normal());
+                                    write!(running_string, "{}", code.0.normal())?;
+                                }
+                            }
+                        }
+                    }
+
+                    if !running_string.is_empty() {
+                        colored_string.push(running_string);
+                    }
+
+                    for line in colored_string.into_iter() {
+                        new_section.push(line);
+                    }
+                }
+                None => {}
+            }
+            while old_section.len() < new_section.len() {
+                old_section.push(" ".repeat(old_col_max_width));
+            }
+            while new_section.len() < old_section.len() {
+                new_section.push(String::new());
+            }
+
+            assert!(!(old_section.is_empty() || new_section.is_empty()));
+            assert_eq!(old_section.len(), new_section.len());
+
+            old_section.push(" ".repeat(old_col_max_width));
+            new_section.push(String::new());
+
+            dbg!(&old_section);
+            dbg!(&new_section);
+
+            old_col.append(&mut old_section);
+            new_col.append(&mut new_section);
+        }
+
+        assert_eq!(old_col.len(), new_col.len());
+        let left_right = old_col.iter().zip(new_col.iter());
+        let mut formatted_output = String::new();
+
+        for (left, right) in left_right {
+            let format_str = dbg!(format!("{left}      {right}"));
+            formatted_output.push_str(&format_str);
+            formatted_output.push_str("\n");
+        }
+
+        dbg!(&formatted_output);
+        write!(f, "{formatted_output}")
+    }
+}
+
+#[derive(Debug)]
+pub struct ViewableDiff {
+    old: Option<Vec<(Option<ExistenceChange>, Code)>>,
+    new: Option<Vec<(Option<ExistenceChange>, Code)>>,
+}
+impl Display for ViewableDiff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -58,6 +319,9 @@ impl Display for ExistenceChange {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct Code(String);
 
 fn get_overview(path: PathBuf, source: String) -> Result<Overview> {
     let file: File = syn::parse_file(&source).context("Error parsing {path}")?;
@@ -292,8 +556,9 @@ impl Display for OverviewDiff {
         }
 
         if !self.functions_diff.is_empty() {
+            let viewable_funcs = self.functions_diff.as_viewable();
             writeln!(&mut string_builder, "{}", underlined("Functions"))?;
-            writeln!(&mut string_builder, "{}", self.functions_diff)?;
+            writeln!(&mut string_builder, "{}", viewable_funcs)?;
         }
 
         if !self.impls_diff.is_empty() {
@@ -411,6 +676,25 @@ pub struct VisDiff {
     pub old: Visibility,
     pub new: Visibility,
 }
+impl ByteRange for VisDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let old_range = self.old.span().byte_range();
+        if old_range.is_empty() {
+            Vec::new()
+        } else {
+            vec![old_range]
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let new_range = self.new.span().byte_range();
+        if new_range.is_empty() {
+            Vec::new()
+        } else {
+            vec![new_range]
+        }
+    }
+}
 
 /// Cheaply cloneable reference to the original source.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -420,4 +704,29 @@ impl From<String> for SourceFile {
         let source = Arc::new(value);
         SourceFile(source)
     }
+}
+
+#[macro_export]
+macro_rules! collect_src_maps {
+    ($($arg:expr),* $(,)?) => {{
+        let mut old_src_map = Vec::new();
+        let mut new_src_map = Vec::new();
+        $(
+            if let Some(ref diff) = $arg {
+                let mut old_ranges = diff.old_ranges();
+                let mut new_ranges = diff.new_ranges();
+
+                old_ranges.retain(|r| ! r.is_empty());
+                new_ranges.retain(|r| ! r.is_empty());
+                if !old_ranges.is_empty() {
+                    old_src_map.append(&mut old_ranges);
+                }
+                if !new_ranges.is_empty() {
+                    new_src_map.append(&mut new_ranges);
+                }
+
+            }
+        )*
+        (old_src_map, new_src_map)
+    }};
 }

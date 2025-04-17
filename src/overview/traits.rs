@@ -248,10 +248,10 @@ impl Display for TraitDiff {
         if let Some(vd) = &self.vis_diff {
             left_column.push("\nvisibility:".to_string());
             right_column.push(String::new());
-            let old_vis = vd.old.span().source_text().unwrap();
-            let new_vis = vd.new.span().source_text().unwrap();
-            left_column.push(format!("- {old_vis}"));
-            right_column.push(format!("+ {new_vis}"));
+            let old_vis = vd.old.span().source_text();
+            let new_vis = vd.new.span().source_text();
+            left_column.push(format!("- {}", old_vis.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_vis.as_deref().unwrap_or("(none)")));
         }
 
         if let Some(items_diff) = &self.items_diff {
@@ -319,12 +319,7 @@ impl Display for TraitDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd
-                        .param()
-                        .unwrap()
-                        .span()
-                        .source_text()
-                        .expect(NO_SRC_ERROR);
+                    let param_source = pd.param().span().source_text().expect(NO_SRC_ERROR);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
                         ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
@@ -370,7 +365,6 @@ impl Display for TraitDiff {
                         for pred_diff in predicate_diffs.iter() {
                             let predicate_source = pred_diff
                                 .predicate()
-                                .unwrap()
                                 .span()
                                 .source_text()
                                 .expect(NO_SRC_ERROR);

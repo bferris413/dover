@@ -1,15 +1,28 @@
 // use cake::cheese::eggs;
 // use rice;
 
-// const unsafe fn run(i: u32) -> std::u32::u32 {
-//     i
-// }
+const unsafe fn run(
+    more: StringsWithNumbersAndStuff,
+    i: u32,
+    b: T,
+    c: A,
+    f: AVeryLongTypeNameThatsAnnoying,
+) -> std::u32::u32 {
+    i
+}
 
-fn build() -> u32 {
+fn build(x: String) -> u32 {
     todo!()
+}
+fn doit() {
+    println!("yes");
 }
 //
 // pub struct Struct1(String);
+
+// const unsafe fn run(i: u32) -> std::u32::u32 {
+//     i
+// }
 
 // struct Struct2;
 // struct Struct1 {

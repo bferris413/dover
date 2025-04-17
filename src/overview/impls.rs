@@ -337,8 +337,10 @@ impl Display for ImplDiff {
         if let Some(ud) = &self.unsafe_diff {
             left_column.push("\nunsafe:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", ud.old));
-            right_column.push(format!("+ {}", ud.new));
+            let old_ud = ud.old.span().source_text();
+            let new_ud = ud.new.span().source_text();
+            left_column.push(format!("- {}", old_ud.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_ud.as_deref().unwrap_or("(none)")));
         }
 
         // generics
@@ -349,12 +351,7 @@ impl Display for ImplDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd
-                        .param()
-                        .unwrap()
-                        .span()
-                        .source_text()
-                        .expect(NO_SRC_ERROR);
+                    let param_source = pd.param().span().source_text().expect(NO_SRC_ERROR);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
                         ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
@@ -400,7 +397,6 @@ impl Display for ImplDiff {
                         for pred_diff in predicate_diffs.iter() {
                             let predicate_source = pred_diff
                                 .predicate()
-                                .unwrap()
                                 .span()
                                 .source_text()
                                 .expect(NO_SRC_ERROR);

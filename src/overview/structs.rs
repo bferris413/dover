@@ -3,7 +3,6 @@ use std::{
     ops::Deref,
 };
 
-use colored::Colorize;
 use syn::{spanned::Spanned, ItemStruct, Visibility};
 
 use crate::{Change, Diff, ExistenceChange, SourceFile, VisDiff};
@@ -330,12 +329,7 @@ impl Display for StructDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd
-                        .param()
-                        .unwrap()
-                        .span()
-                        .source_text()
-                        .expect(NO_SRC_ERROR);
+                    let param_source = pd.param().span().source_text().expect(NO_SRC_ERROR);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
                         ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
@@ -381,7 +375,6 @@ impl Display for StructDiff {
                         for pred_diff in predicate_diffs.iter() {
                             let predicate_source = pred_diff
                                 .predicate()
-                                .unwrap()
                                 .span()
                                 .source_text()
                                 .expect(NO_SRC_ERROR);

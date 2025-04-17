@@ -327,12 +327,7 @@ impl Display for EnumDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd
-                        .param()
-                        .unwrap()
-                        .span()
-                        .source_text()
-                        .expect(NO_SRC_ERROR);
+                    let param_source = pd.param().span().source_text().expect(NO_SRC_ERROR);
                     // let param_source = get_source(vec![Item::Verbatim(param_tokens)]);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
@@ -380,7 +375,6 @@ impl Display for EnumDiff {
                         for pred_diff in predicate_diffs.iter() {
                             let predicate_source = pred_diff
                                 .predicate()
-                                .unwrap()
                                 .span()
                                 .source_text()
                                 .expect(NO_SRC_ERROR);

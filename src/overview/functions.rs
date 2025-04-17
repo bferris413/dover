@@ -1,6 +1,7 @@
 use std::fmt::{
     Formatter, {Display, Write},
 };
+use std::ops::Range;
 
 use syn::{
     spanned::Spanned,
@@ -8,9 +9,9 @@ use syn::{
     Abi, FnArg, ImplItemFn, ItemFn, ReturnType, Visibility,
 };
 
-use crate::{Change, Diff, ExistenceChange, SourceFile, VisDiff};
-
 use super::generics::{Generics, GenericsDiff};
+use crate::{collect_src_maps, ByteRange, Code, ViewableDiffs};
+use crate::{Change, Diff, ExistenceChange, SourceFile, View, ViewableDiff, VisDiff};
 
 const NO_SRC_ERROR: &str = "No source text for function, was parse logic changed?";
 
@@ -190,6 +191,18 @@ impl Diff for Function {
             return None;
         }
 
+        // take all the diffs, if old/new exists, get byte range and store in vec
+        let (old_src_map, new_src_map) = collect_src_maps!(
+            vis_diff,
+            const_diff,
+            async_diff,
+            unsafe_diff,
+            abi_diff,
+            generics_diff,
+            // inputs_diff,
+            return_type_diff,
+        );
+
         Some(FunctionDiff {
             name: self.name.clone(),
             change: Change::Modified,
@@ -203,6 +216,8 @@ impl Diff for Function {
             return_type_diff,
             old: Some(self.clone()),
             new: Some(other.clone()),
+            old_src_map,
+            new_src_map,
         })
     }
 }
@@ -223,6 +238,134 @@ pub struct FunctionDiff {
     return_type_diff: Option<ReturnTypeDiff>,
     old: Option<Function>,
     new: Option<Function>,
+    old_src_map: Vec<Range<usize>>,
+    new_src_map: Vec<Range<usize>>,
+}
+
+impl View for FunctionDiff {
+    fn as_viewable(&self) -> ViewableDiffs {
+        if let Change::Existence(_ex) = self.change {
+            match (&self.old, &self.new) {
+                (Some(_), Some(_)) => panic!("old and new functions were both Some"),
+                (None, None) => panic!("old and new functions were both None"),
+                (Some(old_func), None) => {
+                    return ViewableDiffs::new(vec![ViewableDiff {
+                        old: Some(vec![(
+                            Some(ExistenceChange::Deleted),
+                            Code(format!("{old_func}\n")),
+                        )]),
+                        new: None,
+                    }]);
+                }
+                (None, Some(new_func)) => {
+                    return ViewableDiffs::new(vec![ViewableDiff {
+                        old: None,
+                        new: Some(vec![(
+                            Some(ExistenceChange::Added),
+                            Code(format!("{new_func}\n")),
+                        )]),
+                    }]);
+                }
+            };
+        }
+
+        let old = self.old.as_ref().unwrap();
+        let old_src = &old.source.0.as_bytes();
+        let old_range = old.original_fn.span().byte_range();
+
+        let mut i = old_range.start;
+        let mut src_i = 0;
+        let mut old_diff = Vec::new();
+
+        while i < old_range.end {
+            let maybe_diff_index = self.old_src_map[src_i..]
+                .iter()
+                .position(|r| r.contains(&i));
+            match maybe_diff_index {
+                Some(diff_index) => {
+                    let diff_range = &self.old_src_map[src_i..][diff_index];
+
+                    // doesn't make sense that we wouldn't be aligned with the start of a range
+                    assert_eq!(i, diff_range.start);
+                    let substring = old_src[i..diff_range.end].to_vec();
+                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                    old_diff.push((Some(ExistenceChange::Deleted), code));
+
+                    src_i = diff_index + 1;
+                    i = diff_range.end;
+                }
+                None => {
+                    let start = i;
+                    while i < old_range.end {
+                        let maybe_diff_index = self.old_src_map[src_i..]
+                            .iter()
+                            .position(|r| r.contains(&i));
+                        if maybe_diff_index.is_some() {
+                            break;
+                        } else {
+                            i += 1
+                        }
+                    }
+                    // We're either off the end or we've found a new diff. Either way,
+                    // start..i contains our next range
+                    let substring = old_src[start..i].to_vec();
+                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                    old_diff.push((None, code));
+                }
+            }
+        }
+
+        let new = self.new.as_ref().unwrap();
+        let new_src = &new.source.0.as_bytes();
+        let new_range = new.original_fn.span().byte_range();
+
+        let mut i = new_range.start;
+        let mut src_i = 0;
+        let mut new_diff = Vec::new();
+
+        while i < new_range.end {
+            let maybe_diff_index = self.new_src_map[src_i..]
+                .iter()
+                .position(|r| r.contains(&i));
+            match maybe_diff_index {
+                Some(diff_index) => {
+                    let diff_range = &self.new_src_map[src_i..][diff_index];
+
+                    // doesn't make sense that we wouldn't be aligned with the start of a range
+                    assert_eq!(i, diff_range.start);
+                    let substring = new_src[i..diff_range.end].to_vec();
+                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                    new_diff.push((Some(ExistenceChange::Added), code));
+
+                    src_i = diff_index + 1;
+                    i = diff_range.end;
+                }
+                None => {
+                    let start = i;
+                    while i < new_range.end {
+                        let maybe_diff_index = self.new_src_map[src_i..]
+                            .iter()
+                            .position(|r| r.contains(&i));
+                        if maybe_diff_index.is_some() {
+                            break;
+                        } else {
+                            i += 1
+                        }
+                    }
+                    // We're either off the end or we've found a new diff. Either way,
+                    // start..i contains our next range
+                    let substring = new_src[start..i].to_vec();
+                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                    new_diff.push((None, code));
+                }
+            }
+        }
+
+        ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(old_diff),
+            new: Some(new_diff),
+        }])
+    }
 }
 
 impl Display for FunctionDiff {
@@ -259,8 +402,10 @@ impl Display for FunctionDiff {
         if let Some(abi_diff) = &self.abi_diff {
             left_column.push("\nabi:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", abi_diff.old));
-            right_column.push(format!("+ {}", abi_diff.new));
+            let old_abi = abi_diff.old.span().source_text();
+            let new_abi = abi_diff.new.span().source_text();
+            left_column.push(format!("- {}", old_abi.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_abi.as_deref().unwrap_or("(none)")));
         }
 
         // old and new visibility modifiers, if any
@@ -277,24 +422,30 @@ impl Display for FunctionDiff {
         if let Some(cd) = &self.const_diff {
             left_column.push("\nconst:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", cd.old));
-            right_column.push(format!("+ {}", cd.new));
+            let old_cst = cd.old.span().source_text();
+            let new_cst = cd.new.span().source_text();
+            left_column.push(format!("- {}", old_cst.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_cst.as_deref().unwrap_or("(none)")));
         }
 
         // old and new async modifiers, if any
-        if let Some(cd) = &self.async_diff {
+        if let Some(ad) = &self.async_diff {
             left_column.push("\nasync:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", cd.old));
-            right_column.push(format!("+ {}", cd.new));
+            let old_asnc = ad.old.span().source_text();
+            let new_asnc = ad.new.span().source_text();
+            left_column.push(format!("- {}", old_asnc.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_asnc.as_deref().unwrap_or("(none)")));
         }
 
         // old and new unsafe modifiers, if any
-        if let Some(cd) = &self.unsafe_diff {
+        if let Some(unsafe_diff) = &self.unsafe_diff {
             left_column.push("\nunsafe:".to_string());
             right_column.push(String::new());
-            left_column.push(format!("- {}", cd.old));
-            right_column.push(format!("+ {}", cd.new));
+            let old_unsafe = unsafe_diff.old.span().source_text();
+            let new_unsafe = unsafe_diff.new.span().source_text();
+            left_column.push(format!("- {}", old_unsafe.as_deref().unwrap_or("(none)")));
+            right_column.push(format!("- {}", new_unsafe.as_deref().unwrap_or("(none)")));
         }
 
         // old and new generics, if any
@@ -305,12 +456,7 @@ impl Display for FunctionDiff {
                 let mut new_params = Vec::new();
 
                 for pd in pd.iter() {
-                    let param_source = pd
-                        .param()
-                        .unwrap()
-                        .span()
-                        .source_text()
-                        .expect(NO_SRC_ERROR);
+                    let param_source = pd.param().span().source_text().expect(NO_SRC_ERROR);
                     match pd.change() {
                         ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
                         ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
@@ -356,7 +502,6 @@ impl Display for FunctionDiff {
                         for pred_diff in predicate_diffs.iter() {
                             let predicate_source = pred_diff
                                 .predicate()
-                                .unwrap()
                                 .span()
                                 .source_text()
                                 .expect(NO_SRC_ERROR);
@@ -532,6 +677,33 @@ impl Diff for FnArg {
 pub struct FunctionsDiff {
     diffs: Vec<FunctionDiff>,
 }
+impl View for FunctionsDiff {
+    fn as_viewable(&self) -> ViewableDiffs {
+        let ex_diffs = self
+            .diffs
+            .iter()
+            .filter(|diff| matches!(diff.change, Change::Existence(_)));
+
+        let mut viewables = ViewableDiffs::empty();
+        for diff in ex_diffs {
+            viewables.append(diff.as_viewable());
+        }
+
+        // add/delete diffs should be side-by-side
+        viewables.collapse();
+
+        let mod_diffs = self
+            .diffs
+            .iter()
+            .filter(|diff| matches!(diff.change, Change::Modified));
+
+        for diff in mod_diffs {
+            viewables.append(diff.as_viewable());
+        }
+
+        viewables
+    }
+}
 impl FunctionsDiff {
     pub(crate) fn is_empty(&self) -> bool {
         self.diffs.is_empty()
@@ -595,29 +767,105 @@ impl InputsDiff {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConstDiff {
     existence: ExistenceChange,
-    old: String,
-    new: String,
+    old: Option<Const>,
+    new: Option<Const>,
+}
+impl ByteRange for ConstDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(old) = &self.old {
+            let range = old.span().byte_range();
+            vec![range]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(new) = &self.new {
+            let range = new.span().byte_range();
+            vec![range]
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AsyncDiff {
     existence: ExistenceChange,
-    old: String,
-    new: String,
+    old: Option<Async>,
+    new: Option<Async>,
+}
+impl ByteRange for AsyncDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(old) = &self.old {
+            let range = old.span().byte_range();
+            vec![range]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(new) = &self.new {
+            let range = new.span().byte_range();
+            vec![range]
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UnsafeDiff {
     pub existence: ExistenceChange,
-    pub old: String,
-    pub new: String,
+    pub old: Option<Unsafe>,
+    pub new: Option<Unsafe>,
+}
+impl ByteRange for UnsafeDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(old) = &self.old {
+            let range = old.span().byte_range();
+            vec![range]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(new) = &self.new {
+            let range = new.span().byte_range();
+            vec![range]
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AbiDiff {
     change: Change,
-    old: String,
-    new: String,
+    old: Option<Abi>,
+    new: Option<Abi>,
+}
+impl ByteRange for AbiDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(old) = &self.old {
+            let range = old.span().byte_range();
+            vec![range]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(new) = &self.new {
+            let range = new.span().byte_range();
+            vec![range]
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -625,6 +873,18 @@ pub struct ReturnTypeDiff {
     old: ReturnType,
     new: ReturnType,
 }
+impl ByteRange for ReturnTypeDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let range = self.old.span().byte_range();
+        vec![range]
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let range = self.new.span().byte_range();
+        vec![range]
+    }
+}
+
 impl ReturnTypeDiff {
     fn old(&self) -> &ReturnType {
         &self.old
@@ -660,15 +920,15 @@ impl Diff for Option<Unsafe> {
 
         match (self, other) {
             (Some(_), Some(_)) => None,
-            (None, Some(_)) => Some(UnsafeDiff {
+            (None, Some(unsfe)) => Some(UnsafeDiff {
                 existence: ExistenceChange::Added,
-                old: "(none)".to_string(),
-                new: "unsafe".to_string(),
+                old: None,
+                new: Some(unsfe.clone()),
             }),
-            (Some(_), None) => Some(UnsafeDiff {
+            (Some(unsfe), None) => Some(UnsafeDiff {
                 existence: ExistenceChange::Deleted,
-                old: "unsafe".to_string(),
-                new: "(none)".to_string(),
+                old: Some(unsfe.clone()),
+                new: None,
             }),
             (None, None) => None,
         }
@@ -685,15 +945,15 @@ impl Diff for Option<Async> {
 
         match (self, other) {
             (Some(_), Some(_)) => None,
-            (None, Some(_)) => Some(AsyncDiff {
+            (None, Some(c)) => Some(AsyncDiff {
                 existence: ExistenceChange::Added,
-                old: "(none)".to_string(),
-                new: "async".to_string(),
+                old: None,
+                new: Some(c.clone()),
             }),
-            (Some(_), None) => Some(AsyncDiff {
+            (Some(c), None) => Some(AsyncDiff {
                 existence: ExistenceChange::Deleted,
-                old: "async".to_string(),
-                new: "(none)".to_string(),
+                old: Some(c.clone()),
+                new: None,
             }),
             (None, None) => None,
         }
@@ -710,15 +970,15 @@ impl Diff for Option<Const> {
 
         match (self, other) {
             (Some(_), Some(_)) => None,
-            (None, Some(_)) => Some(ConstDiff {
+            (None, Some(c)) => Some(ConstDiff {
                 existence: ExistenceChange::Added,
-                old: "(none)".to_string(),
-                new: "const".to_string(),
+                old: None,
+                new: Some(c.clone()),
             }),
-            (Some(_), None) => Some(ConstDiff {
+            (Some(c), None) => Some(ConstDiff {
                 existence: ExistenceChange::Deleted,
-                old: "const".to_string(),
-                new: "(none)".to_string(),
+                old: Some(c.clone()),
+                new: None,
             }),
             (None, None) => None,
         }
@@ -736,18 +996,18 @@ impl Diff for Option<Abi> {
         match (self, other) {
             (Some(old), Some(new)) => Some(AbiDiff {
                 change: Change::Modified,
-                old: format!("extern \"{}\"", old.name.as_ref().unwrap().value()),
-                new: format!("extern \"{}\"", new.name.as_ref().unwrap().value()),
+                old: Some(old.clone()),
+                new: Some(new.clone()),
             }),
             (None, Some(new)) => Some(AbiDiff {
                 change: Change::Existence(ExistenceChange::Added),
-                old: "(none)".to_string(),
-                new: format!("extern \"{}\"", new.name.as_ref().unwrap().value()),
+                old: None,
+                new: Some(new.clone()),
             }),
             (Some(old), None) => Some(AbiDiff {
                 change: Change::Existence(ExistenceChange::Deleted),
-                old: format!("extern \"{}\"", old.name.as_ref().unwrap().value()),
-                new: "(none)".to_string(),
+                old: Some(old.clone()),
+                new: None,
             }),
             (None, None) => None,
         }
