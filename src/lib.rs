@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use colored::{Colorize, CustomColor};
+use colored::Colorize;
 use overview::enums::{Enum, Enums, EnumsDiff};
 use overview::functions::{Functions, FunctionsDiff};
 use overview::impls::{Impls, ImplsDiff};
@@ -80,10 +80,11 @@ impl ViewableDiffs {
 }
 impl Display for ViewableDiffs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // dbg!(self);
-        //
-        // None of this is optimized for readability or efficiency. It's barely working.
+        dbg!(self);
 
+        // ---------------------------------------------------------------------------------
+        // | None of this is optimized for readability or efficiency. It's barely working. |
+        // ---------------------------------------------------------------------------------
         let (mut old_col, mut new_col) = (Vec::new(), Vec::new());
 
         let old_col_max_width = {
@@ -94,7 +95,7 @@ impl Display for ViewableDiffs {
                     println!("was old");
                     let all_strings: Vec<_> = old.iter().map(|(_, c)| c.0.clone()).collect();
                     let string = all_strings.join("");
-                    let local_max = string.lines().map(|l| dbg!(l.len())).max().unwrap_or(0);
+                    let local_max = string.lines().map(|l| l.len()).max().unwrap_or(0);
                     cur_max = cur_max.max(local_max);
                 }
             }
@@ -265,13 +266,11 @@ impl Display for ViewableDiffs {
         let mut formatted_output = String::new();
 
         for (left, right) in left_right {
-            let format_str = dbg!(format!("{left}      {right}"));
+            let format_str = dbg!(format!("{left}      {right}\n"));
             formatted_output.push_str(&format_str);
-            formatted_output.push_str("\n");
         }
 
-        dbg!(&formatted_output);
-        write!(f, "{formatted_output}")
+        write!(f, "{}", formatted_output.trim_end())
     }
 }
 
@@ -727,6 +726,11 @@ macro_rules! collect_src_maps {
 
             }
         )*
+        old_src_map.sort_by(|a, b| a.start.cmp(&b.start));
+        old_src_map.sort_by(|a, b| a.end.cmp(&b.end));
+
+        new_src_map.sort_by(|a, b| a.start.cmp(&b.start));
+        new_src_map.sort_by(|a, b| a.end.cmp(&b.end));
         (old_src_map, new_src_map)
     }};
 }

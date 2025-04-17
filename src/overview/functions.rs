@@ -199,7 +199,7 @@ impl Diff for Function {
             unsafe_diff,
             abi_diff,
             generics_diff,
-            // inputs_diff,
+            inputs_diff,
             return_type_diff,
         );
 
@@ -271,11 +271,14 @@ impl View for FunctionDiff {
 
         let old = self.old.as_ref().unwrap();
         let old_src = &old.source.0.as_bytes();
-        let old_range = old.original_fn.span().byte_range();
+        let old_start = old.original_fn.span().byte_range().start;
+        let old_end = old.original_fn.block.span().byte_range().start;
+        let old_range = old_start..old_end;
 
         let mut i = old_range.start;
         let mut src_i = 0;
         let mut old_diff = Vec::new();
+        dbg!(&self.old_src_map);
 
         while i < old_range.end {
             let maybe_diff_index = self.old_src_map[src_i..]
@@ -317,7 +320,9 @@ impl View for FunctionDiff {
 
         let new = self.new.as_ref().unwrap();
         let new_src = &new.source.0.as_bytes();
-        let new_range = new.original_fn.span().byte_range();
+        let new_start = new.original_fn.span().byte_range().start;
+        let new_end = new.original_fn.block.span().byte_range().start;
+        let new_range = new_start..new_end;
 
         let mut i = new_range.start;
         let mut src_i = 0;
@@ -644,6 +649,25 @@ pub struct FnArgDiff {
     old: Option<FnArg>,
     new: Option<FnArg>,
 }
+impl ByteRange for FnArgDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(old) = &self.old {
+            let byte_range = old.span().byte_range();
+            vec![byte_range]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        if let Some(new) = &self.new {
+            let byte_range = new.span().byte_range();
+            vec![byte_range]
+        } else {
+            Vec::new()
+        }
+    }
+}
 impl FnArgDiff {
     fn change(&self) -> Change {
         self.change
@@ -757,6 +781,27 @@ impl Display for FunctionsDiff {
 #[derive(Debug)]
 pub struct InputsDiff {
     inputs: Vec<Option<FnArgDiff>>,
+}
+impl ByteRange for InputsDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let mut old_ranges = Vec::new();
+        for input in self.inputs.iter() {
+            if let Some(arg_diff) = input {
+                old_ranges.append(&mut arg_diff.old_ranges());
+            }
+        }
+        old_ranges
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let mut new_ranges = Vec::new();
+        for input in self.inputs.iter() {
+            if let Some(arg_diff) = input {
+                new_ranges.append(&mut arg_diff.new_ranges());
+            }
+        }
+        new_ranges
+    }
 }
 impl InputsDiff {
     fn diffs(&self) -> &[Option<FnArgDiff>] {
