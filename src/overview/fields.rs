@@ -1,6 +1,8 @@
-use crate::{Change, Diff, ExistenceChange};
+use std::ops::Range;
 
-use syn::{FieldMutability, Type};
+use crate::{ByteRange, Change, Diff, ExistenceChange};
+
+use syn::{spanned::Spanned, FieldMutability, Type};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Fields(pub Vec<syn::Field>);
@@ -51,6 +53,31 @@ impl Diff for Fields {
 pub struct FieldsDiff {
     diffs: Vec<Option<FieldDiff>>,
 }
+impl ByteRange for FieldsDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let mut ranges = vec![];
+        for diff in &self.diffs {
+            if let Some(diff) = diff {
+                let old_ranges = diff.old_ranges();
+                ranges.extend(old_ranges);
+            }
+        }
+
+        ranges
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let mut ranges = vec![];
+        for diff in &self.diffs {
+            if let Some(diff) = diff {
+                let new_ranges = diff.new_ranges();
+                ranges.extend(new_ranges);
+            }
+        }
+
+        ranges
+    }
+}
 impl FieldsDiff {
     pub fn diffs(&self) -> &[Option<FieldDiff>] {
         &self.diffs
@@ -90,6 +117,21 @@ impl FieldDiff {
     }
     pub fn new(&self) -> Option<&syn::Field> {
         self.new.as_ref()
+    }
+}
+impl ByteRange for FieldDiff {
+    fn old_ranges(&self) -> Vec<std::ops::Range<usize>> {
+        self.old
+            .as_ref()
+            .map(|field| vec![field.span().byte_range()])
+            .unwrap_or_default()
+    }
+
+    fn new_ranges(&self) -> Vec<std::ops::Range<usize>> {
+        self.new
+            .as_ref()
+            .map(|field| vec![field.span().byte_range()])
+            .unwrap_or_default()
     }
 }
 

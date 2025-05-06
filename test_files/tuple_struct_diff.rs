@@ -27,11 +27,11 @@ fn cake() {}
 // }
 
 struct Struct2;
-// struct Struct1 {
-//     field1: u32,
-//     field2: String,
-// }
-impl Struct1 {
+struct Struct {
+    field1: u32,
+    field2: String,
+}
+impl Struct {
     fn new(field1: u32, field2: String) -> Self {
         Self { field1, field2 }
     }

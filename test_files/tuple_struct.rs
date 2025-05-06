@@ -28,7 +28,7 @@ fn eggs() {}
 
 struct Struct;
 // struct Struct1;
-impl Struct1 {
+impl Struct {
     fn new(field2: u64) -> Self {
         Self
     }

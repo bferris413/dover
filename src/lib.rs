@@ -87,7 +87,7 @@ impl Display for ViewableDiffs {
         dbg!(self);
 
         // ---------------------------------------------------------------------------------
-        // | None of this is optimized for readability or efficiency. It's barely working. |
+        //  None of this is optimized for readability or efficiency. It's barely working.  |
         //                                                                                 |
         //   Edit: A recent bug reminded me how terrible this section is to work in. It    |
         //         needs a complete rewrite.                                               |
@@ -218,38 +218,36 @@ impl Display for ViewableDiffs {
                             let next = lines.next().unwrap();
                             match change {
                                 Some(ExistenceChange::Added) => {
-                                    println!("writing {}", next.green());
+                                    println!("writing new add(1){}", next.green());
                                     write!(running_string, "{}", next.green())?;
                                 }
                                 Some(ExistenceChange::Deleted) => panic!(),
                                 None => {
-                                    println!("writing {}", next.normal());
+                                    println!("writing new del(1){}", next.normal());
                                     write!(running_string, "{}", next.normal())?;
                                 }
                             }
-                            println!("pushing {running_string}");
+                            println!("pushing new(1) {running_string}");
                             colored_string.push(running_string.clone());
                             running_string.clear();
                             while let Some(line) = lines.next() {
                                 match change {
                                     Some(ExistenceChange::Added) => {
                                         if lines.peek().is_some()
-                                            || (lines.peek().is_none()
-                                                && code.0.trim_end_matches(" ").ends_with('\n'))
+                                            || (lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
-                                            println!("pushing {}", line.green());
+                                            println!("pushing new add(2){}", line.green());
                                             colored_string.push(line.green().to_string());
                                         } else {
                                             // the last piece and not terminated with \n
-                                            println!("writing new add (2){}", line.green());
+                                            println!("writing new add(2){}", line.green());
                                             write!(running_string, "{}", line.green())?;
                                         }
                                     }
                                     Some(ExistenceChange::Deleted) => panic!(),
                                     None => {
                                         if lines.peek().is_some()
-                                            || (lines.peek().is_none()
-                                                && code.0.trim_end_matches(" ").ends_with('\n'))
+                                            || (lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
                                             println!("pushing {}", line.normal());
                                             colored_string.push(line.normal().to_string())
@@ -585,8 +583,9 @@ impl Display for OverviewDiff {
         }
 
         if !self.structs_diff.is_empty() {
+            let viewable_structs = self.structs_diff.as_viewable();
             writeln!(&mut string_builder, "{}", underlined("Structs"))?;
-            writeln!(&mut string_builder, "{}", self.structs_diff)?;
+            writeln!(&mut string_builder, "{viewable_structs}")?;
         }
 
         if !self.enums_diff.is_empty() {
