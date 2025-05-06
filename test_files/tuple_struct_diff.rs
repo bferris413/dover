@@ -14,6 +14,8 @@
 fn build(x: String) -> u32 {
     todo!()
 }
+
+fn cake() {}
 // fn doit() {
 //     println!("yes");
 // }

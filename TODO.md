@@ -3,7 +3,6 @@
 - Compare between two branches.
 - Figure out sensible defaults for add/remove files
 - Refactor old/new pattern to use single underlying type
-- colored output
 - impl item - const
 - impl item - macro
 - impl item - type
@@ -15,11 +14,14 @@
 - probably need to add attributes for all items
 - From<ImplItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
 - "fragment" formatter
+- remove irrelevant details from impls (like unmodified functions)
+- remove { .. } from Function impl items
 
 -- BUG --------------------------------------------------------------------------
 - struct fields assume order matters, but this is only relevant for tuple structs
 
 -- DONE ------------------------------------------------------------------------
+- done - colored output - term
 - done - Identify freestanding function signature pieces
 - done - struct impl - fn
 - done - trait impl - fn

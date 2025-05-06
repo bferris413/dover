@@ -12,7 +12,7 @@ where
 //     println!("yes");
 // }
 
-fn cake() {}
+pub fn cake() {}
 
 fn eggs() {}
 

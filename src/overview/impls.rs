@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    fmt::{self, Display, Write},
-    ops::Range,
-};
+use std::{collections::HashMap, fmt, ops::Range};
 
 use syn::{
     spanned::Spanned,
@@ -267,59 +263,17 @@ impl View for ImplsDiff {
         viewables
     }
 }
-impl Display for ImplsDiff {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.impl_diffs.is_empty() {
-            return writeln!(f, "(no changes)");
-        }
-
-        let ex_diffs = self
-            .impl_diffs
-            .iter()
-            .filter(|diff| matches!(diff.change, Change::Existence(_)));
-
-        let (mut left_col, mut right_col) = (String::new(), String::new());
-        let mut any_ex_diffs = false;
-        for diff in ex_diffs {
-            any_ex_diffs = true;
-            match diff.change {
-                Change::Existence(ExistenceChange::Added) => {
-                    write!(right_col, "{diff}")?;
-                }
-                Change::Existence(ExistenceChange::Deleted) => {
-                    write!(left_col, "{diff}")?;
-                }
-                _ => {
-                    unreachable!()
-                }
-            }
-        }
-
-        if any_ex_diffs {
-            let output = crate::format_as_columns(&vec![left_col], &vec![right_col]);
-            writeln!(f, "{output}")?;
-        }
-
-        let mod_diffs = self
-            .impl_diffs
-            .iter()
-            .filter(|diff| matches!(diff.change, Change::Modified));
-
-        for diff in mod_diffs {
-            writeln!(f, "{diff}")?;
-        }
-
-        Ok(())
-    }
-}
 
 #[derive(Default, Debug)]
 pub struct ImplDiff {
     change: Change,
     old: Option<ItemImpl>,
     new: Option<ItemImpl>,
+    #[allow(unused)]
     unsafe_diff: Option<UnsafeDiff>,
+    #[allow(unused)]
     generics_diff: Option<GenericsDiff>,
+    #[allow(unused)]
     items_diff: Option<ImplItemsDiff>,
     old_src: Option<SourceFile>,
     new_src: Option<SourceFile>,
@@ -455,150 +409,6 @@ impl View for ImplDiff {
             old: Some(old_diff),
             new: Some(new_diff),
         }])
-    }
-}
-impl Display for ImplDiff {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Change::Existence(ex) = self.change {
-            let i = match (&self.old, &self.new) {
-                (Some(_), Some(_)) => panic!("old and new impls were both Some"),
-                (None, None) => panic!("old and new impls were both None"),
-                (Some(i), None) | (None, Some(i)) => i,
-            };
-
-            let source = i
-                .span()
-                .source_text()
-                .expect(NO_SRC_ERROR)
-                .lines()
-                .map(|line| format!("{ex} {line}"))
-                .collect::<Vec<String>>()
-                .join("\n");
-
-            return write!(f, "{source}");
-        }
-
-        let mut left_column = Vec::new();
-        let mut right_column = Vec::new();
-
-        // old and new impl blocks
-        let old = self.old.as_ref().unwrap();
-        let new = self.new.as_ref().unwrap();
-        let old_source = old
-            .span()
-            .source_text()
-            .expect(NO_SRC_ERROR)
-            .lines()
-            .map(|line| format!("~ {line}"))
-            .collect::<Vec<String>>()
-            .join("\n");
-        let new_source = new
-            .span()
-            .source_text()
-            .expect(NO_SRC_ERROR)
-            .lines()
-            .map(|line| format!("~ {line}"))
-            .collect::<Vec<String>>()
-            .join("\n");
-        left_column.push(old_source);
-        right_column.push(new_source);
-
-        // old and new unsafe modifiers, if any
-        if let Some(ud) = &self.unsafe_diff {
-            left_column.push("\nunsafe:".to_string());
-            right_column.push(String::new());
-            let old_ud = ud.old.span().source_text();
-            let new_ud = ud.new.span().source_text();
-            left_column.push(format!("- {}", old_ud.as_deref().unwrap_or("(none)")));
-            right_column.push(format!("- {}", new_ud.as_deref().unwrap_or("(none)")));
-        }
-
-        // generics
-        if let Some(gd) = &self.generics_diff {
-            // generic param diff, if any
-            if let Some(pd) = gd.params_diff() {
-                let mut old_params = Vec::new();
-                let mut new_params = Vec::new();
-
-                for pd in pd.iter() {
-                    let param_source = pd.param().span().source_text().expect(NO_SRC_ERROR);
-                    match pd.change() {
-                        ExistenceChange::Deleted => old_params.push(format!("- {param_source}",)),
-                        ExistenceChange::Added => new_params.push(format!("+ {param_source}",)),
-                    }
-                }
-
-                left_column.push("\ngeneric parameters:".to_string());
-                right_column.push(String::new());
-                left_column.push(old_params.join("\n"));
-                right_column.push(new_params.join("\n"));
-            }
-
-            // where clause diff, if any
-            if let Some(wd) = gd.where_diff() {
-                left_column.push("\nwhere clause:".to_string());
-                right_column.push(String::new());
-                match wd.change() {
-                    Change::Existence(ex) => {
-                        // where clause was added or deleted wholesale
-                        let where_clause_source = wd
-                            .where_clause()
-                            .unwrap()
-                            .span()
-                            .source_text()
-                            .expect(NO_SRC_ERROR);
-                        match ex {
-                            ExistenceChange::Deleted => {
-                                left_column.push(format!("- {where_clause_source}"));
-                                right_column.push(String::new());
-                            }
-                            ExistenceChange::Added => {
-                                right_column.push(format!("+ {where_clause_source}"));
-                                left_column.push(String::new());
-                            }
-                        }
-                    }
-                    Change::Modified => {
-                        // where clause predicates were added or deleted
-                        let predicate_diffs = wd.predicates().unwrap();
-                        let mut old_predicates = Vec::new();
-                        let mut new_predicates = Vec::new();
-
-                        for pred_diff in predicate_diffs.iter() {
-                            let predicate_source = pred_diff
-                                .predicate()
-                                .span()
-                                .source_text()
-                                .expect(NO_SRC_ERROR);
-                            match pred_diff.change() {
-                                ExistenceChange::Deleted => {
-                                    old_predicates.push(format!("- {predicate_source}",))
-                                }
-                                ExistenceChange::Added => {
-                                    new_predicates.push(format!("+ {predicate_source}",))
-                                }
-                            }
-                        }
-
-                        left_column.push(old_predicates.join("\n"));
-                        right_column.push(new_predicates.join("\n"));
-                    }
-                }
-            }
-        }
-
-        // let impls_fns_diff = self
-        //     .items_diff
-        //     .as_ref()
-        //     .map(|id| format!("{}", id.fns_diff));
-
-        // let formatted_output = crate::format_as_columns(&left_column, &right_column);
-        // if let Some(diff_output) = impls_fns_diff {
-        //     write!(f, "{formatted_output}\n{diff_output}")
-        // } else {
-        //     write!(f, "{formatted_output}")
-        // }
-        todo!()
     }
 }
 
