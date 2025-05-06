@@ -1,6 +1,6 @@
-use syn::Variant;
+use syn::{spanned::Spanned, Variant};
 
-use crate::{Change, Diff, ExistenceChange};
+use crate::{ByteRange, Change, Diff, ExistenceChange};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Variants(Vec<Variant>);
@@ -73,6 +73,25 @@ impl VariantDiffs {
         &self.diffs
     }
 }
+impl ByteRange for VariantDiffs {
+    fn old_ranges(&self) -> Vec<std::ops::Range<usize>> {
+        let mut ranges = vec![];
+        for diff in self.diffs() {
+            ranges.extend(diff.old_ranges());
+        }
+
+        ranges
+    }
+
+    fn new_ranges(&self) -> Vec<std::ops::Range<usize>> {
+        let mut ranges = vec![];
+        for diff in self.diffs() {
+            ranges.extend(diff.new_ranges());
+        }
+
+        ranges
+    }
+}
 
 impl Diff for Variant {
     type Diff = Option<VariantDiff>;
@@ -108,5 +127,22 @@ impl VariantDiff {
     }
     pub fn new(&self) -> Option<&Variant> {
         self.new.as_ref()
+    }
+}
+impl ByteRange for VariantDiff {
+    fn old_ranges(&self) -> Vec<std::ops::Range<usize>> {
+        if let Some(old) = &self.old {
+            vec![old.span().byte_range()]
+        } else {
+            vec![]
+        }
+    }
+
+    fn new_ranges(&self) -> Vec<std::ops::Range<usize>> {
+        if let Some(new) = &self.new {
+            vec![new.span().byte_range()]
+        } else {
+            vec![]
+        }
     }
 }

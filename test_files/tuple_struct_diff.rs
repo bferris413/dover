@@ -44,11 +44,15 @@ impl Struct {
 
 // trait Rice {}
 
-// enum L7Protocol {
-//     Https,
-//     Dns,
-//     Smtp,
-// }
+enum L7Protocol {
+    Https { t: T },
+    Dns,
+    Smtp,
+}
+
+enum Person {
+    Idea,
+}
 
 // struct Thing<T, U>(T, U)
 // where

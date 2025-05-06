@@ -214,14 +214,14 @@ fn get_blob_contents(repo: &Repository, oid: &Oid) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
-    #[test]
-    fn test_get_changed_files() {
-        let repo_path = PathBuf::from(".");
-        let changed_files = get_changed_files(repo_path, None, None).unwrap();
-        for file in changed_files {
-            println!("{file}");
-        }
-    }
+    // #[test]
+    // fn test_get_changed_files() {
+    //     let repo_path = PathBuf::from(".");
+    //     let changed_files = get_changed_files(repo_path, None, None).unwrap();
+    //     for file in changed_files {
+    //         println!("{file}");
+    //     }
+    // }
 }

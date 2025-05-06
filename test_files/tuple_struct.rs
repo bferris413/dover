@@ -20,11 +20,15 @@ fn eggs() {}
 //     fn cheese(&self) -> cheese::Cheese;
 // }
 
-// enum L7Protocol<T: Clone> {
-//     Http { t: T },
-//     Https,
-//     STUN,
-// }
+enum L7Protocol<T: Clone> {
+    Http { t: T },
+    Https {},
+    Stun,
+}
+
+enum Buddy {
+    Friend,
+}
 
 struct Struct;
 // struct Struct1;

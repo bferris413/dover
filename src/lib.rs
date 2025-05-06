@@ -143,8 +143,7 @@ impl Display for ViewableDiffs {
                                 match change {
                                     Some(ExistenceChange::Deleted) => {
                                         if lines.peek().is_some()
-                                            || (lines.peek().is_none()
-                                                && code.0.trim_end_matches(" ").ends_with('\n'))
+                                            || (lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
                                             println!("pushing old del(1) {}", line.red());
                                             let gap = old_col_max_width.saturating_sub(line.len());
@@ -160,8 +159,7 @@ impl Display for ViewableDiffs {
                                     Some(ExistenceChange::Added) => panic!(),
                                     None => {
                                         if lines.peek().is_some()
-                                            || (lines.peek().is_none()
-                                                && code.0.trim_end_matches(" ").ends_with('\n'))
+                                            || (lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
                                             println!("pushing old nil(1) {}", line.normal());
                                             let gap = old_col_max_width.saturating_sub(line.len());
@@ -589,8 +587,9 @@ impl Display for OverviewDiff {
         }
 
         if !self.enums_diff.is_empty() {
+            let viewable_enums = self.enums_diff.as_viewable();
             writeln!(&mut string_builder, "{}", underlined("Enums"))?;
-            writeln!(&mut string_builder, "{}", self.enums_diff)?;
+            writeln!(&mut string_builder, "{viewable_enums}")?;
         }
 
         if !self.traits_diff.is_empty() {
