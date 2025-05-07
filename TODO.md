@@ -17,9 +17,11 @@
 - remove irrelevant details from impls (like unmodified functions)
 - remove irrelevant details from structs
 - remove irrelevant details from enums
+- remove irrelevant details from traits
 - introduce .toml config for user config output
 - remove { .. } from Function impl items
 - enum variant diffs are too coarse (e.g. stuff like Fields aren't stored)
+- trait diffs are too coarse
 
 -- BUG --------------------------------------------------------------------------
 - struct fields assume order matters, but this is only relevant for tuple structs
