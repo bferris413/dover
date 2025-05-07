@@ -16,9 +16,11 @@ pub fn cake() {}
 
 fn eggs() {}
 
-// trait Milkshake {
-//     fn cheese(&self) -> cheese::Cheese;
-// }
+trait Milkshake {
+    fn cheese(&self) -> cheese::Cheese;
+}
+
+trait Cake {}
 
 enum L7Protocol<T: Clone> {
     Http { t: T },

@@ -1,12 +1,15 @@
 use std::{
-    fmt::{Display, Write},
-    ops::Deref,
+    fmt::Display,
+    ops::{Deref, Range},
 };
 
 use quote::ToTokens;
 use syn::{spanned::Spanned, Item, ItemTrait, TraitItem, Visibility};
 
-use crate::{get_source, Change, Diff, ExistenceChange, SourceFile, VisDiff};
+use crate::{
+    collect_src_maps, get_source, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
+    ViewableDiff, ViewableDiffs, VisDiff,
+};
 
 use super::generics::{Generics, GenericsDiff};
 
@@ -46,10 +49,8 @@ impl Diff for Traits {
                         name: trait_.name().to_string(),
                         change: Change::Existence(ExistenceChange::Deleted),
                         old: Some(trait_.original.clone()),
-                        new: None,
-                        vis_diff: None,
-                        items_diff: None,
-                        generics_diff: None,
+                        old_src: Some(trait_.source.clone()),
+                        ..Default::default()
                     };
                     trait_diffs.push(sdiff);
                 }
@@ -58,18 +59,16 @@ impl Diff for Traits {
 
         // file2
         // Everything here is either new or already accounted for
-        for struct_ in &other.0 {
-            if let Err(_e) = self.0.binary_search_by(|s| s.name().cmp(struct_.name())) {
-                let sdiff = TraitDiff {
-                    name: struct_.name().to_string(),
+        for trait_ in &other.0 {
+            if let Err(_e) = self.0.binary_search_by(|t| t.name().cmp(trait_.name())) {
+                let tdiff = TraitDiff {
+                    name: trait_.name().to_string(),
                     change: Change::Existence(ExistenceChange::Added),
-                    old: None,
-                    new: Some(struct_.original.clone()),
-                    vis_diff: None,
-                    items_diff: None,
-                    generics_diff: None,
+                    new: Some(trait_.original.clone()),
+                    new_src: Some(trait_.source.clone()),
+                    ..Default::default()
                 };
-                trait_diffs.push(sdiff);
+                trait_diffs.push(tdiff);
             }
         }
 
@@ -137,11 +136,17 @@ impl Diff for Trait {
             return None;
         }
 
+        let (old_src_map, new_src_map) = collect_src_maps!(vis_diff, items_diff, generics_diff,);
+
         let diff = TraitDiff {
             name: self.name.clone(),
             change: Change::Modified,
             old: Some(self.original.clone()),
             new: Some(other.original.clone()),
+            old_src: Some(self.source.clone()),
+            new_src: Some(other.source.clone()),
+            old_src_map,
+            new_src_map,
             vis_diff,
             items_diff,
             generics_diff,
@@ -159,55 +164,178 @@ impl TraitsDiff {
         self.diffs.is_empty()
     }
 }
-impl Display for TraitsDiff {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl View for TraitsDiff {
+    fn as_viewable(&self) -> ViewableDiffs {
         let ex_diffs = self
             .diffs
             .iter()
             .filter(|diff| matches!(diff.change, Change::Existence(_)));
 
-        let (mut left_col, mut right_col) = (String::new(), String::new());
-        let mut any_ex_diffs = false;
-        for diff in ex_diffs {
-            any_ex_diffs = true;
-            match diff.change {
-                Change::Existence(ExistenceChange::Added) => {
-                    write!(right_col, "{diff}")?;
-                }
-                Change::Existence(ExistenceChange::Deleted) => {
-                    write!(left_col, "{diff}")?;
-                }
-                _ => {
-                    unreachable!()
-                }
-            }
+        let mut viewables = ViewableDiffs::empty();
+        for ex_diff in ex_diffs {
+            viewables.append(ex_diff.as_viewable());
         }
-        if any_ex_diffs {
-            let output = crate::format_as_columns(&vec![left_col], &vec![right_col]);
-            writeln!(f, "{output}")?;
-        }
+
+        // add/delete diffs should be side-by-side
+        viewables.collapse();
 
         let mod_diffs = self
             .diffs
             .iter()
             .filter(|diff| matches!(diff.change, Change::Modified));
 
-        for diff in mod_diffs {
-            writeln!(f, "{diff}")?;
+        for mod_diff in mod_diffs {
+            viewables.append(mod_diff.as_viewable());
         }
 
-        Ok(())
+        viewables
     }
 }
 
+#[derive(Debug, Default)]
 pub struct TraitDiff {
-    pub name: String,
-    pub change: Change,
-    pub old: Option<ItemTrait>,
-    pub new: Option<ItemTrait>,
-    pub vis_diff: Option<VisDiff>,
-    pub items_diff: Option<Vec<TraitItemDiff>>,
-    pub generics_diff: Option<GenericsDiff>,
+    name: String,
+    change: Change,
+    old: Option<ItemTrait>,
+    new: Option<ItemTrait>,
+    old_src: Option<SourceFile>,
+    new_src: Option<SourceFile>,
+    old_src_map: Vec<Range<usize>>,
+    new_src_map: Vec<Range<usize>>,
+    vis_diff: Option<VisDiff>,
+    items_diff: Option<Vec<TraitItemDiff>>,
+    generics_diff: Option<GenericsDiff>,
+}
+impl View for TraitDiff {
+    fn as_viewable(&self) -> ViewableDiffs {
+        if let Change::Existence(ex) = self.change {
+            let _struct = match (&self.old, &self.new) {
+                (Some(_), Some(_)) => panic!("old and new traits were both Some"),
+                (None, None) => panic!("old and new traits were both None"),
+                (Some(_struct), None) | (None, Some(_struct)) => _struct,
+            };
+
+            let source = _struct.span().source_text().expect(NO_SRC_ERROR);
+            let change = vec![(Some(ex), Code(format!("{source}\n")))];
+            match ex {
+                ExistenceChange::Deleted => {
+                    return ViewableDiffs::new(vec![ViewableDiff {
+                        old: Some(change),
+                        new: None,
+                    }])
+                }
+                ExistenceChange::Added => {
+                    return ViewableDiffs::new(vec![ViewableDiff {
+                        old: None,
+                        new: Some(change),
+                    }])
+                }
+            };
+        }
+
+        let old = self.old.as_ref().unwrap();
+        let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
+        // if we want to remove the block we'd do it here
+        let old_range = old.span().byte_range();
+        // let old_end = old.original_fn.block.span().byte_range().start;
+        // let old_range = old_start..old_end;
+
+        let mut i = old_range.start;
+        let mut src_i = 0;
+        let mut old_diff = Vec::new();
+
+        while i < old_range.end {
+            let maybe_diff_index = self.old_src_map[src_i..]
+                .iter()
+                .position(|r| r.contains(&i));
+            match maybe_diff_index {
+                Some(diff_index) => {
+                    let diff_range = &self.old_src_map[src_i..][diff_index];
+
+                    // doesn't make sense that we wouldn't be aligned with the start of a range
+                    assert_eq!(i, diff_range.start);
+                    let substring = old_src[i..diff_range.end].to_vec();
+                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                    old_diff.push((Some(ExistenceChange::Deleted), code));
+
+                    src_i = diff_index + 1;
+                    i = diff_range.end;
+                }
+                None => {
+                    let start = i;
+                    while i < old_range.end {
+                        let maybe_diff_index = self.old_src_map[src_i..]
+                            .iter()
+                            .position(|r| r.contains(&i));
+                        if maybe_diff_index.is_some() {
+                            break;
+                        } else {
+                            i += 1
+                        }
+                    }
+                    // We're either off the end or we've found a new diff. Either way,
+                    // start..i contains our next range
+                    let substring = old_src[start..i].to_vec();
+                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                    old_diff.push((None, code));
+                }
+            }
+        }
+
+        let new = self.new.as_ref().unwrap();
+        let new_src = &self.new_src.as_ref().unwrap().0.as_bytes();
+        // if we want to remove the block we'd do it here
+        let new_range = new.span().byte_range();
+        // let new_end = new.original_fn.block.span().byte_range().start;
+        // let new_range = new_start..new_end;
+
+        let mut i = new_range.start;
+        let mut src_i = 0;
+        let mut new_diff = Vec::new();
+
+        while i < new_range.end {
+            let maybe_diff_index = self.new_src_map[src_i..]
+                .iter()
+                .position(|r| r.contains(&i));
+            match maybe_diff_index {
+                Some(diff_index) => {
+                    let diff_range = &self.new_src_map[src_i..][diff_index];
+
+                    // doesn't make sense that we wouldn't be aligned with the start of a range
+                    assert_eq!(i, diff_range.start);
+                    let substring = new_src[i..diff_range.end].to_vec();
+                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                    new_diff.push((Some(ExistenceChange::Added), code));
+
+                    src_i = diff_index + 1;
+                    i = diff_range.end;
+                }
+                None => {
+                    let start = i;
+                    while i < new_range.end {
+                        let maybe_diff_index = self.new_src_map[src_i..]
+                            .iter()
+                            .position(|r| r.contains(&i));
+                        if maybe_diff_index.is_some() {
+                            break;
+                        } else {
+                            i += 1
+                        }
+                    }
+                    // We're either off the end or we've found a new diff. Either way,
+                    // start..i contains our next range
+                    let substring = new_src[start..i].to_vec();
+                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                    new_diff.push((None, code));
+                }
+            }
+        }
+
+        ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(old_diff),
+            new: Some(new_diff),
+        }])
+    }
 }
 impl Display for TraitDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -453,26 +581,50 @@ impl Diff for Vec<TraitItem> {
     }
 }
 
+#[derive(Debug)]
 pub struct TraitItemDiff {
     change: Change,
     old: Option<TraitItem>,
     new: Option<TraitItem>,
 }
-impl Display for TraitItemDiff {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Change::*;
-        match self.change {
-            Existence(ExistenceChange::Added) => {
-                let tokens = self.new.to_token_stream();
-                let source = crate::get_source(vec![Item::Verbatim(tokens)]);
-                writeln!(f, "+ {source}")
-            }
-            Existence(ExistenceChange::Deleted) => {
-                let tokens = self.old.to_token_stream();
-                let source = crate::get_source(vec![Item::Verbatim(tokens)]);
-                writeln!(f, "- {source}")
-            }
-            _ => unreachable!(),
+impl ByteRange for TraitItemDiff {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let mut ranges = vec![];
+
+        if let Some(old) = &self.old {
+            ranges.push(old.span().byte_range());
         }
+
+        ranges
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let mut ranges = vec![];
+
+        if let Some(new) = &self.new {
+            ranges.push(new.span().byte_range());
+        }
+
+        ranges
+    }
+}
+
+impl ByteRange for Vec<TraitItemDiff> {
+    fn old_ranges(&self) -> Vec<Range<usize>> {
+        let mut ranges = vec![];
+        for diff in self.iter() {
+            ranges.extend(diff.old_ranges());
+        }
+
+        ranges
+    }
+
+    fn new_ranges(&self) -> Vec<Range<usize>> {
+        let mut ranges = vec![];
+        for diff in self.iter() {
+            ranges.extend(diff.new_ranges());
+        }
+
+        ranges
     }
 }

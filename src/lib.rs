@@ -593,8 +593,9 @@ impl Display for OverviewDiff {
         }
 
         if !self.traits_diff.is_empty() {
+            let viewable_traits = self.traits_diff.as_viewable();
             writeln!(&mut string_builder, "{}", underlined("Traits"))?;
-            writeln!(&mut string_builder, "{}", self.traits_diff)?;
+            writeln!(&mut string_builder, "{viewable_traits}",)?;
         }
 
         if !self.functions_diff.is_empty() {
