@@ -1,5 +1,5 @@
-// use cake::cheese::eggs;
-// use rice;
+use cake::cheese::eggs;
+use rice;
 
 // const unsafe fn run(
 //     more: StringsWithNumbersAndStuff,

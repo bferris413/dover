@@ -3,7 +3,6 @@ use std::{
     ops::{Deref, Range},
 };
 
-use quote::ToTokens;
 use syn::{spanned::Spanned, Item, ItemTrait, TraitItem, Visibility};
 
 use crate::{

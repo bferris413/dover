@@ -90,7 +90,7 @@ impl Display for ViewableDiffs {
         //  None of this is optimized for readability or efficiency. It's barely working.  |
         //                                                                                 |
         //   Edit: A recent bug reminded me how terrible this section is to work in. It    |
-        //         needs a complete rewrite.                                               |
+        //         probably needs a complete rewrite.                                      |
         // ---------------------------------------------------------------------------------
         let (mut old_col, mut new_col) = (Vec::new(), Vec::new());
 
@@ -576,8 +576,9 @@ impl Display for OverviewDiff {
         writeln!(&mut string_builder, "{header}")?;
 
         if !self.uses_diff.is_empty() {
+            let viewable_uses = self.uses_diff.as_viewable();
             writeln!(&mut string_builder, "{}", underlined("Use"))?;
-            writeln!(&mut string_builder, "{}", self.uses_diff)?;
+            writeln!(&mut string_builder, "{viewable_uses}")?;
         }
 
         if !self.structs_diff.is_empty() {

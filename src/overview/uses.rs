@@ -1,8 +1,5 @@
-use crate::{Diff, ExistenceChange};
-use std::{
-    fmt::{Display, Write},
-    ops::Deref,
-};
+use crate::{Code, Diff, ExistenceChange, View, ViewableDiff, ViewableDiffs};
+use std::{fmt::Display, ops::Deref};
 use syn::UseTree;
 
 /// A collection of `use` statements.
@@ -70,9 +67,24 @@ pub struct UseDiff {
     change: ExistenceChange,
     use_: Use,
 }
-impl Display for UseDiff {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.change, self.use_)
+impl View for UseDiff {
+    fn as_viewable(&self) -> ViewableDiffs {
+        let source = &self.use_.0;
+        let change = vec![(Some(self.change), Code(format!("{source}\n")))];
+        match self.change {
+            ExistenceChange::Deleted => {
+                return ViewableDiffs::new(vec![ViewableDiff {
+                    old: Some(change),
+                    new: None,
+                }])
+            }
+            ExistenceChange::Added => {
+                return ViewableDiffs::new(vec![ViewableDiff {
+                    old: None,
+                    new: Some(change),
+                }])
+            }
+        };
     }
 }
 
@@ -84,31 +96,24 @@ impl UsesDiff {
         self.diffs.is_empty()
     }
 }
-impl Display for UsesDiff {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.diffs.is_empty() {
-            return writeln!(f, "(no changes)");
+impl View for UsesDiff {
+    fn as_viewable(&self) -> ViewableDiffs {
+        let all_ex_changes = self
+            .diffs
+            .iter()
+            .all(|d| matches!(d.change, ExistenceChange::Added | ExistenceChange::Deleted));
+
+        assert!(all_ex_changes);
+
+        let mut viewables = ViewableDiffs::empty();
+        for ex_diff in self.diffs.iter() {
+            viewables.append(ex_diff.as_viewable());
         }
 
-        let (mut left_col, mut right_col) = (String::new(), String::new());
-        let mut any_ex_diffs = false;
-        for diff in self.diffs.iter() {
-            any_ex_diffs = true;
-            match diff.change {
-                ExistenceChange::Added => {
-                    write!(right_col, "{diff}")?;
-                }
-                ExistenceChange::Deleted => {
-                    write!(left_col, "{diff}")?;
-                }
-            }
-        }
-        if any_ex_diffs {
-            let output = crate::format_as_columns(&vec![left_col], &vec![right_col]);
-            writeln!(f, "{output}")?;
-        }
+        // add/delete diffs should be side-by-side
+        viewables.collapse();
 
-        Ok(())
+        viewables
     }
 }
 
@@ -116,32 +121,54 @@ impl Display for UsesDiff {
 ///
 /// The collection is not guaranteed to be sorted or deduped.
 pub fn get_paths_from_usetree(tree: &UseTree) -> Vec<Use> {
+    get_paths_from_usetree_with_depth(tree, 0)
+}
+
+fn get_paths_from_usetree_with_depth(tree: &UseTree, depth: usize) -> Vec<Use> {
     let mut paths = Vec::new();
     match tree {
         syn::UseTree::Path(path) => {
             let ident = &path.ident;
-            let sub_paths = get_paths_from_usetree(&path.tree);
+            let sub_paths = get_paths_from_usetree_with_depth(&path.tree, depth + 1);
             for sub_path in sub_paths {
-                let import = format!("{}::{}", ident, sub_path);
+                let import = format!(
+                    "{}{}::{}",
+                    if depth == 0 { "use " } else { "" },
+                    ident,
+                    sub_path,
+                );
                 paths.push(Use(import));
             }
         }
         syn::UseTree::Name(name) => {
-            paths.push(Use(name.ident.to_string()));
+            paths.push(Use(format!(
+                "{}{}",
+                if depth == 0 { "use " } else { "" },
+                name.ident.to_string()
+            )));
         }
         syn::UseTree::Rename(rename) => {
-            paths.push(Use(rename.ident.to_string()));
+            paths.push(Use(format!(
+                "{}{}",
+                if depth == 0 { "use " } else { "" },
+                rename.ident.to_string()
+            )));
         }
         syn::UseTree::Glob(_) => {
-            paths.push(Use("*".to_string()));
+            paths.push(Use(format!(
+                "{}{}",
+                if depth == 0 { "use " } else { "" },
+                '*'
+            )));
         }
         syn::UseTree::Group(group) => {
             for tree in &group.items {
-                let sub_paths = get_paths_from_usetree(tree);
+                let sub_paths = get_paths_from_usetree_with_depth(tree, depth + 1);
                 paths.extend(sub_paths);
             }
         }
     }
+
     paths
 }
 
@@ -153,21 +180,21 @@ mod tests {
     fn test_get_paths_from_usetree_path() {
         let use_tree: syn::UseTree = syn::parse_str("std::fs::File").unwrap();
         let paths = get_paths_from_usetree(&use_tree);
-        assert_eq!(paths, vec![Use("std::fs::File".to_string())]);
+        assert_eq!(paths, vec![Use("use std::fs::File".to_string())]);
     }
 
     #[test]
     fn test_get_paths_from_usetree_rename() {
         let use_tree: syn::UseTree = syn::parse_str("std::fs::File as StdFile").unwrap();
         let paths = get_paths_from_usetree(&use_tree);
-        assert_eq!(paths, vec![Use("std::fs::File".to_string())]);
+        assert_eq!(paths, vec![Use("use std::fs::File".to_string())]);
     }
 
     #[test]
     fn test_get_paths_from_usetree_glob() {
         let use_tree: syn::UseTree = syn::parse_str("std::fs::*").unwrap();
         let paths = get_paths_from_usetree(&use_tree);
-        assert_eq!(paths, vec![Use("std::fs::*".to_string())]);
+        assert_eq!(paths, vec![Use("use std::fs::*".to_string())]);
     }
 
     #[test]
@@ -178,10 +205,10 @@ mod tests {
         assert_eq!(
             paths,
             vec![
-                Use("std::fs".to_string()),
-                Use("std::io::self".to_string()),
-                Use("std::io::empty".to_string()),
-                Use("std::error::Error".to_string())
+                Use("use std::fs".to_string()),
+                Use("use std::io::self".to_string()),
+                Use("use std::io::empty".to_string()),
+                Use("use std::error::Error".to_string())
             ]
         );
     }
@@ -190,7 +217,7 @@ mod tests {
     fn test_get_paths_from_usetree_deeply_nested() {
         let use_tree: syn::UseTree = syn::parse_str("a::b::c::d::e").unwrap();
         let paths = get_paths_from_usetree(&use_tree);
-        assert_eq!(paths, vec![Use("a::b::c::d::e".to_string())]);
+        assert_eq!(paths, vec![Use("use a::b::c::d::e".to_string())]);
     }
 
     #[test]
@@ -200,9 +227,9 @@ mod tests {
         assert_eq!(
             paths,
             vec![
-                Use("a::b::c".to_string()),
-                Use("a::b::d".to_string()),
-                Use("a::e".to_string())
+                Use("use a::b::c".to_string()),
+                Use("use a::b::d".to_string()),
+                Use("use a::e".to_string())
             ]
         );
     }
@@ -214,9 +241,9 @@ mod tests {
         assert_eq!(
             paths,
             vec![
-                Use("a::self".to_string()),
-                Use("a::b::self".to_string()),
-                Use("a::b::c".to_string())
+                Use("use a::self".to_string()),
+                Use("use a::b::self".to_string()),
+                Use("use a::b::c".to_string())
             ]
         );
     }
@@ -228,9 +255,9 @@ mod tests {
         assert_eq!(
             paths,
             vec![
-                Use("a::b".to_string()),
-                Use("a::c::d".to_string()),
-                Use("a::c::e".to_string())
+                Use("use a::b".to_string()),
+                Use("use a::c::d".to_string()),
+                Use("use a::c::e".to_string())
             ]
         );
     }
@@ -241,7 +268,7 @@ mod tests {
         let paths = get_paths_from_usetree(&use_tree);
         assert_eq!(
             paths,
-            vec![Use("a::*".to_string()), Use("a::b".to_string())]
+            vec![Use("use a::*".to_string()), Use("use a::b".to_string())]
         );
     }
 
@@ -258,7 +285,7 @@ mod tests {
         let paths = get_paths_from_usetree(&use_tree);
         assert_eq!(
             paths,
-            vec![Use("a::b".to_string()), Use("a::c".to_string())]
+            vec![Use("use a::b".to_string()), Use("use a::c".to_string())]
         );
     }
 
@@ -269,10 +296,10 @@ mod tests {
         assert_eq!(
             paths,
             vec![
-                Use("a::b::c".to_string()),
-                Use("a::b::d::e".to_string()),
-                Use("a::f::g".to_string()),
-                Use("a::f::h::i".to_string())
+                Use("use a::b::c".to_string()),
+                Use("use a::b::d::e".to_string()),
+                Use("use a::f::g".to_string()),
+                Use("use a::f::h::i".to_string())
             ]
         );
     }
@@ -280,12 +307,12 @@ mod tests {
     #[test]
     fn test_diff_with_no_changes() {
         let uses1 = Uses::from(vec![
-            Use("std::fs::File".to_string()),
-            Use("std::io::Read".to_string()),
+            Use("use std::fs::File".to_string()),
+            Use("use std::io::Read".to_string()),
         ]);
         let uses2 = Uses::from(vec![
-            Use("std::fs::File".to_string()),
-            Use("std::io::Read".to_string()),
+            Use("use std::fs::File".to_string()),
+            Use("use std::io::Read".to_string()),
         ]);
 
         let diff = uses1.diff_with(&uses2);
@@ -294,16 +321,16 @@ mod tests {
 
     #[test]
     fn test_diff_with_added_imports() {
-        let uses1 = Uses::from(vec![Use("std::fs::File".to_string())]);
+        let uses1 = Uses::from(vec![Use("use std::fs::File".to_string())]);
         let uses2 = Uses::from(vec![
-            Use("std::fs::File".to_string()),
-            Use("std::io::Read".to_string()),
+            Use("use std::fs::File".to_string()),
+            Use("use std::io::Read".to_string()),
         ]);
 
         let diff = uses1.diff_with(&uses2);
         let exp_diff = UseDiff {
             change: (ExistenceChange::Added),
-            use_: Use("std::io::Read".to_string()),
+            use_: Use("use std::io::Read".to_string()),
         };
         assert_eq!(diff.diffs, vec![exp_diff]);
     }
@@ -311,15 +338,15 @@ mod tests {
     #[test]
     fn test_diff_with_removed_imports() {
         let uses1 = Uses::from(vec![
-            Use("std::fs::File".to_string()),
-            Use("std::io::Read".to_string()),
+            Use("use std::fs::File".to_string()),
+            Use("use std::io::Read".to_string()),
         ]);
-        let uses2 = Uses::from(vec![Use("std::fs::File".to_string())]);
+        let uses2 = Uses::from(vec![Use("use std::fs::File".to_string())]);
 
         let diff = uses1.diff_with(&uses2);
         let exp_diff = vec![UseDiff {
             change: (ExistenceChange::Deleted),
-            use_: Use("std::io::Read".to_string()),
+            use_: Use("use std::io::Read".to_string()),
         }];
         assert_eq!(diff.diffs, exp_diff);
     }
@@ -327,23 +354,23 @@ mod tests {
     #[test]
     fn test_diff_with_added_and_removed_imports() {
         let uses1 = Uses::from(vec![
-            Use("std::fs::File".to_string()),
-            Use("std::io::Read".to_string()),
+            Use("use std::fs::File".to_string()),
+            Use("use std::io::Read".to_string()),
         ]);
         let uses2 = Uses::from(vec![
-            Use("std::fs::File".to_string()),
-            Use("std::io::Write".to_string()),
+            Use("use std::fs::File".to_string()),
+            Use("use std::io::Write".to_string()),
         ]);
 
         let diff = uses1.diff_with(&uses2);
         let exp_diff = vec![
             UseDiff {
                 change: (ExistenceChange::Deleted),
-                use_: Use("std::io::Read".to_string()),
+                use_: Use("use std::io::Read".to_string()),
             },
             UseDiff {
                 change: (ExistenceChange::Added),
-                use_: Use("std::io::Write".to_string()),
+                use_: Use("use std::io::Write".to_string()),
             },
         ];
         assert_eq!(diff.diffs, exp_diff);
@@ -352,33 +379,33 @@ mod tests {
     #[test]
     fn test_diff_with_multiple_changes() {
         let uses1 = Uses::from(vec![
-            Use("std::fs::File".to_string()),
-            Use("std::io::Read".to_string()),
-            Use("std::path::Path".to_string()),
+            Use("use std::fs::File".to_string()),
+            Use("use std::io::Read".to_string()),
+            Use("use std::path::Path".to_string()),
         ]);
         let uses2 = Uses::from(vec![
-            Use("std::fs::File".to_string()),
-            Use("std::fs::OpenOptions".to_string()),
-            Use("std::io::Write".to_string()),
+            Use("use std::fs::File".to_string()),
+            Use("use std::fs::OpenOptions".to_string()),
+            Use("use std::io::Write".to_string()),
         ]);
 
         let diff = uses1.diff_with(&uses2);
         let exp_diff = vec![
             UseDiff {
                 change: (ExistenceChange::Added),
-                use_: Use("std::fs::OpenOptions".to_string()),
+                use_: Use("use std::fs::OpenOptions".to_string()),
             },
             UseDiff {
                 change: (ExistenceChange::Deleted),
-                use_: Use("std::io::Read".to_string()),
+                use_: Use("use std::io::Read".to_string()),
             },
             UseDiff {
                 change: (ExistenceChange::Added),
-                use_: Use("std::io::Write".to_string()),
+                use_: Use("use std::io::Write".to_string()),
             },
             UseDiff {
                 change: (ExistenceChange::Deleted),
-                use_: Use("std::path::Path".to_string()),
+                use_: Use("use std::path::Path".to_string()),
             },
         ];
         assert_eq!(diff.diffs, exp_diff);
