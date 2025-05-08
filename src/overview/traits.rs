@@ -5,12 +5,11 @@ use std::{
 
 use syn::{spanned::Spanned, Item, ItemTrait, TraitItem, Visibility};
 
+use super::generics::{Generics, GenericsDiff};
 use crate::{
     collect_src_maps, get_source, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
     ViewableDiff, ViewableDiffs, VisDiff,
 };
-
-use super::generics::{Generics, GenericsDiff};
 
 const NO_SRC_ERROR: &str = "No source text for trait, was parse logic changed?";
 

@@ -22,6 +22,7 @@
 - remove { .. } from Function impl items
 - enum variant diffs are too coarse (e.g. stuff like Fields aren't stored)
 - trait diffs are too coarse
+- associate impl blocks with their respective enum/struct if within same file
 
 -- BUG --------------------------------------------------------------------------
 - struct fields assume order matters, but this is only relevant for tuple structs

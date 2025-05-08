@@ -151,7 +151,6 @@ dependencies = [
  "git2",
  "prettyplease",
  "proc-macro2",
- "quote",
  "syn",
 ]
 

@@ -636,62 +636,6 @@ fn underlined(s: &str) -> String {
     format!("{s}\n{underline}")
 }
 
-/// Formats the left and right columns of a diff as two columns.
-///
-/// The left column is the original text and the right column is the modified text.
-/// Each string in a given list is considered a section, and the first line of
-/// each section is always aligned.
-fn format_as_columns(left: &Vec<String>, right: &Vec<String>) -> String {
-    // Each string is a section of the struct diff. We expect there to be an equal number
-    // of sections in the left and right columns, even though the number of lines per section
-    // may be different.
-    assert_eq!(left.len(), right.len());
-
-    // Get the maximum width of the left column across all lines within each section
-    // so we can align the right column.
-    let max_width = left
-        .iter()
-        .map(|s| s.lines().map(|s| s.len()).max().unwrap_or(0))
-        .max()
-        .unwrap()
-        .max(50);
-
-    let left_right = left.iter().zip(right.iter());
-    let mut formatted_output = String::new();
-
-    let mut should_pop_newline = false;
-    for (left, right) in left_right {
-        let mut left_lines = left.lines().collect::<Vec<_>>();
-        let mut right_lines = right.lines().collect::<Vec<_>>();
-
-        // Pad the left and right columns with empty lines so they have the same number of lines
-        // (zip short circuits when one of the iterators is exhausted)
-        while left_lines.len() < right_lines.len() {
-            left_lines.push("");
-        }
-        while right_lines.len() < left_lines.len() {
-            right_lines.push("");
-        }
-
-        for (left_line, right_line) in left_lines.iter().zip(right_lines.iter()) {
-            formatted_output.push_str(&format!(
-                "{:<width$} {}",
-                left_line,
-                right_line,
-                width = max_width
-            ));
-            formatted_output.push('\n');
-            should_pop_newline = true;
-        }
-    }
-
-    if should_pop_newline {
-        formatted_output.pop(); // removed extra newline
-    }
-
-    formatted_output
-}
-
 /// Returns the formatted Rust source of the given items as a string.
 fn get_source(items: Vec<Item>) -> String {
     let syn_file = File {
