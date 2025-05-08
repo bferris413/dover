@@ -16,7 +16,7 @@ pub fn cake() {}
 
 fn eggs() {}
 
-trait Milkshake {
+trait Milkshake<T: Clone> {
     fn cheese(&self) -> cheese::Cheese;
 }
 

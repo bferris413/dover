@@ -39,7 +39,7 @@ impl Struct {
 //struct Struct3;
 
 trait Milkshake {
-    fn cheese(&self) -> eggs::Cheese;
+    fn cheese<T>(&mut self) -> eggs::Cheese;
 }
 
 trait Rice {}

@@ -78,6 +78,7 @@ impl ByteRange for FieldsDiff {
         ranges
     }
 }
+#[allow(unused)]
 impl FieldsDiff {
     pub fn diffs(&self) -> &[Option<FieldDiff>] {
         &self.diffs

@@ -207,6 +207,7 @@ impl View for StructsDiff {
 
 /// A diff between two struct declarations.
 #[derive(Debug, Default)]
+#[allow(unused)]
 pub struct StructDiff {
     name: String,
     change: Change,

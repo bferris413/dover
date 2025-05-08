@@ -227,6 +227,7 @@ impl ByteRange for GenericsDiff {
         new_ranges
     }
 }
+#[allow(unused)]
 impl GenericsDiff {
     pub fn params_diff(&self) -> Option<&Vec<GenericParamDiff>> {
         self.params_diff.as_ref()

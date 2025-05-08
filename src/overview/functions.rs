@@ -6,6 +6,7 @@ use syn::{
     token::{Async, Const, Unsafe},
     Abi, FnArg, ImplItemFn, ItemFn, ReturnType, Visibility,
 };
+use syn::{Block, TraitItemFn};
 
 use super::generics::{Generics, GenericsDiff};
 use crate::{collect_src_maps, ByteRange, Code, ViewableDiffs};
@@ -33,6 +34,15 @@ impl Functions {
         let mut functions: Vec<Function> = fns
             .into_iter()
             .map(|item| Function::new_impl(item, source.clone()))
+            .collect();
+        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
+        functions.dedup_by(|f1, f2| f1.name() == f2.name());
+        Functions(functions)
+    }
+    pub fn new_trait(fns: Vec<TraitItemFn>, source: SourceFile) -> Self {
+        let mut functions: Vec<Function> = fns
+            .into_iter()
+            .map(|item| Function::new_trait(item, source.clone()))
             .collect();
         functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
         functions.dedup_by(|f1, f2| f1.name() == f2.name());
@@ -130,7 +140,7 @@ impl Function {
     }
     pub fn new_impl(f: ImplItemFn, source: SourceFile) -> Self {
         Function {
-            vis: f.vis.clone().into(),
+            vis: f.vis.clone(),
             r#const: f.sig.constness,
             r#async: f.sig.asyncness,
             r#unsafe: f.sig.unsafety,
@@ -147,6 +157,31 @@ impl Function {
                 vis: f.vis,
                 sig: f.sig,
                 block: Box::new(f.block),
+            },
+            source,
+        }
+    }
+    pub fn new_trait(f: TraitItemFn, source: SourceFile) -> Self {
+        let vis = Visibility::Inherited;
+        let empty_block: Block = syn::parse_str("{}").unwrap();
+        Function {
+            vis: vis.clone(),
+            r#const: f.sig.constness,
+            r#async: f.sig.asyncness,
+            r#unsafe: f.sig.unsafety,
+            abi: f.sig.abi.clone(),
+            name: f.sig.ident.to_string(),
+            generics: Generics::from(f.sig.generics.clone()),
+            inputs: Inputs {
+                args: f.sig.clone().inputs.into_iter().collect(),
+            },
+            output: f.sig.output.clone(),
+            // TODO: bad and tricky, plus we're losing a default field
+            original_fn: ItemFn {
+                attrs: f.attrs,
+                vis,
+                sig: f.sig,
+                block: Box::new(empty_block),
             },
             source,
         }
@@ -516,6 +551,7 @@ impl ByteRange for FnArgDiff {
         }
     }
 }
+#[allow(unused)]
 impl FnArgDiff {
     fn change(&self) -> Change {
         self.change
@@ -624,6 +660,7 @@ impl ByteRange for InputsDiff {
         new_ranges
     }
 }
+#[allow(unused)]
 impl InputsDiff {
     fn diffs(&self) -> &[Option<FnArgDiff>] {
         &self.inputs
@@ -751,6 +788,7 @@ impl ByteRange for ReturnTypeDiff {
     }
 }
 
+#[allow(unused)]
 impl ReturnTypeDiff {
     fn old(&self) -> &ReturnType {
         &self.old

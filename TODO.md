@@ -6,6 +6,9 @@
 - impl item - const
 - impl item - macro
 - impl item - type
+- trait item - const
+- trait item - macro
+- trait item - type
 - attributes - fn
 - attributes - enum
 - attributes - struct
@@ -13,6 +16,7 @@
 - attributes - module
 - probably need to add attributes for all items
 - From<ImplItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
+- From<TraitItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
 - "fragment" formatter
 - remove irrelevant details from impls (like unmodified functions)
 - remove irrelevant details from structs

@@ -5,7 +5,10 @@ use std::{
 
 use syn::{spanned::Spanned, Item, ItemTrait, TraitItem, Visibility};
 
-use super::generics::{Generics, GenericsDiff};
+use super::{
+    functions::{Functions, FunctionsDiff},
+    generics::{Generics, GenericsDiff},
+};
 use crate::{
     collect_src_maps, get_source, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
     ViewableDiff, ViewableDiffs, VisDiff,
@@ -126,7 +129,39 @@ impl Diff for Trait {
 
         let vis_diff = self.vis.diff_with(&other.vis);
         let generics_diff = self.generics.diff_with(&other.generics);
-        let items_diff = self.items.diff_with(&other.items);
+        let items_diff = {
+            // TODO: only supports functions
+            if self.items == other.items {
+                return None;
+            }
+
+            let self_fn_items: Vec<_> = self
+                .items
+                .iter()
+                .filter_map(|i| match i {
+                    TraitItem::Fn(func) => Some(func.clone()),
+                    _ => None,
+                })
+                .collect();
+            let other_fn_items: Vec<_> = other
+                .items
+                .iter()
+                .filter_map(|i| match i {
+                    TraitItem::Fn(func) => Some(func.clone()),
+                    _ => None,
+                })
+                .collect();
+
+            let self_items_fns = Functions::new_trait(self_fn_items, self.source.clone());
+            let other_items_fns = Functions::new_trait(other_fn_items, other.source.clone());
+
+            let fns_diff = self_items_fns.diff_with(&other_items_fns);
+            if fns_diff.is_empty() {
+                None
+            } else {
+                Some(TraitItemsDiff { fns_diff })
+            }
+        };
 
         // it's possible for a trait to be non-equal and yet the diffs don't contain
         // anything we're interested in tracking.
@@ -191,6 +226,7 @@ impl View for TraitsDiff {
 }
 
 #[derive(Debug, Default)]
+#[allow(unused)]
 pub struct TraitDiff {
     name: String,
     change: Change,
@@ -201,7 +237,7 @@ pub struct TraitDiff {
     old_src_map: Vec<Range<usize>>,
     new_src_map: Vec<Range<usize>>,
     vis_diff: Option<VisDiff>,
-    items_diff: Option<Vec<TraitItemDiff>>,
+    items_diff: Option<TraitItemsDiff>,
     generics_diff: Option<GenericsDiff>,
 }
 impl View for TraitDiff {
@@ -336,111 +372,65 @@ impl View for TraitDiff {
     }
 }
 
-impl Diff for TraitItem {
-    type Diff = Option<TraitItemDiff>;
-    fn diff_with(&self, other: &Self) -> Self::Diff {
-        if self == other {
-            return None;
-        }
-        let change = Change::Modified;
-        let old = self.clone();
-        let new = other.clone();
+// #[derive(Debug)]
+// pub struct TraitItemDiff {
+//     change: Change,
+//     trait_fn_diff: Option<FunctionDiff>,
+//     old: Option<TraitItem>,
+//     new: Option<TraitItem>,
+// }
+// impl ByteRange for TraitItemDiff {
+//     fn old_ranges(&self) -> Vec<Range<usize>> {
+//         let mut ranges = vec![];
 
-        Some(TraitItemDiff {
-            change,
-            old: Some(old),
-            new: Some(new),
-        })
-    }
-}
+//         if let Some(old) = &self.old {
+//             ranges.push(old.span().byte_range());
+//         }
 
-impl Diff for Vec<TraitItem> {
-    type Diff = Option<Vec<TraitItemDiff>>;
-    fn diff_with(&self, other: &Self) -> Self::Diff {
-        if self == other {
-            return None;
-        }
+//         ranges
+//     }
 
-        let mut item_diffs = Vec::new();
+//     fn new_ranges(&self) -> Vec<Range<usize>> {
+//         let mut ranges = vec![];
 
-        // extremely coarse. eventually we want to diff items themselves, but for
-        // now we just use full equality with added/removed changes (no modifications)
-        for old_item in self.iter() {
-            if !other.contains(old_item) {
-                let change = Change::Existence(ExistenceChange::Deleted);
-                let diff = TraitItemDiff {
-                    change,
-                    old: Some(old_item.clone()),
-                    new: None,
-                };
-                item_diffs.push(diff);
-            }
-        }
+//         if let Some(new) = &self.new {
+//             ranges.push(new.span().byte_range());
+//         }
 
-        for new_item in other.iter() {
-            if !self.contains(new_item) {
-                let change = Change::Existence(ExistenceChange::Added);
-                let diff = TraitItemDiff {
-                    change,
-                    old: None,
-                    new: Some(new_item.clone()),
-                };
-                item_diffs.push(diff);
-            }
-        }
+//         ranges
+//     }
+// }
 
-        if item_diffs.is_empty() {
-            return None;
-        } else {
-            Some(item_diffs)
-        }
-    }
-}
+// impl ByteRange for Vec<TraitItemDiff> {
+//     fn old_ranges(&self) -> Vec<Range<usize>> {
+//         let mut ranges = vec![];
+//         for diff in self.iter() {
+//             ranges.extend(diff.old_ranges());
+//         }
+
+//         ranges
+//     }
+
+//     fn new_ranges(&self) -> Vec<Range<usize>> {
+//         let mut ranges = vec![];
+//         for diff in self.iter() {
+//             ranges.extend(diff.new_ranges());
+//         }
+
+//         ranges
+//     }
+// }
 
 #[derive(Debug)]
-pub struct TraitItemDiff {
-    change: Change,
-    old: Option<TraitItem>,
-    new: Option<TraitItem>,
+pub struct TraitItemsDiff {
+    fns_diff: FunctionsDiff,
 }
-impl ByteRange for TraitItemDiff {
+impl ByteRange for TraitItemsDiff {
     fn old_ranges(&self) -> Vec<Range<usize>> {
-        let mut ranges = vec![];
-
-        if let Some(old) = &self.old {
-            ranges.push(old.span().byte_range());
-        }
-
-        ranges
+        self.fns_diff.old_ranges()
     }
 
     fn new_ranges(&self) -> Vec<Range<usize>> {
-        let mut ranges = vec![];
-
-        if let Some(new) = &self.new {
-            ranges.push(new.span().byte_range());
-        }
-
-        ranges
-    }
-}
-
-impl ByteRange for Vec<TraitItemDiff> {
-    fn old_ranges(&self) -> Vec<Range<usize>> {
-        let mut ranges = vec![];
-        for diff in self.iter() {
-            ranges.extend(diff.old_ranges());
-        }
-
-        ranges
-    }
-
-    fn new_ranges(&self) -> Vec<Range<usize>> {
-        let mut ranges = vec![];
-        for diff in self.iter() {
-            ranges.extend(diff.new_ranges());
-        }
-
-        ranges
+        self.fns_diff.new_ranges()
     }
 }

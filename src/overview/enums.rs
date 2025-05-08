@@ -207,6 +207,7 @@ impl View for EnumsDiff {
 
 /// A diff between two enum declarations.
 #[derive(Debug, Default)]
+#[allow(unused)]
 pub struct EnumDiff {
     name: String,
     change: Change,
