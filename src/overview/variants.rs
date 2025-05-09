@@ -2,6 +2,8 @@ use syn::{spanned::Spanned, Variant};
 
 use crate::{ByteRange, Change, Diff, ExistenceChange};
 
+use super::fields::{Fields, FieldsDiff};
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Variants(Vec<Variant>);
 impl From<Vec<Variant>> for Variants {
@@ -33,7 +35,7 @@ impl Diff for Variants {
                     let vdiff = VariantDiff {
                         change: Change::Existence(ExistenceChange::Deleted),
                         old: Some(variant.clone()),
-                        new: None,
+                        ..Default::default()
                     };
                     variant_diffs.push(vdiff);
                 }
@@ -46,8 +48,8 @@ impl Diff for Variants {
             if let Err(_e) = self.0.binary_search_by(|s| s.ident.cmp(&variant.ident)) {
                 let sdiff = VariantDiff {
                     change: Change::Existence(ExistenceChange::Added),
-                    old: None,
                     new: Some(variant.clone()),
+                    ..Default::default()
                 };
                 variant_diffs.push(sdiff);
             }
@@ -100,21 +102,31 @@ impl Diff for Variant {
         if self == other {
             return None;
         }
+        if self.ident != other.ident {
+            return None;
+        }
+
+        let self_fields = Fields(self.fields.clone().into_iter().collect());
+        let other_fields = Fields(other.fields.clone().into_iter().collect());
+        let fields_diff = self_fields.diff_with(&other_fields);
+
         let change = Change::Modified;
         let old = self.clone();
         let new = other.clone();
 
         Some(VariantDiff {
             change,
+            fields_diff,
             old: Some(old),
             new: Some(new),
         })
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VariantDiff {
     change: Change,
+    fields_diff: Option<FieldsDiff>,
     old: Option<Variant>,
     new: Option<Variant>,
 }
@@ -131,7 +143,9 @@ impl VariantDiff {
 }
 impl ByteRange for VariantDiff {
     fn old_ranges(&self) -> Vec<std::ops::Range<usize>> {
-        if let Some(old) = &self.old {
+        if let Some(fd) = &self.fields_diff {
+            fd.old_ranges()
+        } else if let Some(old) = &self.old {
             vec![old.span().byte_range()]
         } else {
             vec![]
@@ -139,7 +153,9 @@ impl ByteRange for VariantDiff {
     }
 
     fn new_ranges(&self) -> Vec<std::ops::Range<usize>> {
-        if let Some(new) = &self.new {
+        if let Some(fd) = &self.fields_diff {
+            fd.new_ranges()
+        } else if let Some(new) = &self.new {
             vec![new.span().byte_range()]
         } else {
             vec![]

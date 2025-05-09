@@ -14,24 +14,23 @@
 - attributes - struct
 - attributes - trait
 - attributes - module
-- probably need to add attributes for all items
 - From<ImplItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
 - From<TraitItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
-- "fragment" formatter
 - remove irrelevant details from impls (like unmodified functions)
 - remove irrelevant details from structs
 - remove irrelevant details from enums
 - remove irrelevant details from traits
 - introduce .toml config for user config output
 - remove { .. } from Function impl items
-- enum variant diffs are too coarse (e.g. stuff like Fields aren't stored)
-- trait diffs are too coarse
 - associate impl blocks with their respective enum/struct if within same file
 
 -- BUG --------------------------------------------------------------------------
 - struct fields assume order matters, but this is only relevant for tuple structs
 
 -- DONE ------------------------------------------------------------------------
+- done - "fragment" formatter (we just use the original source now, no formatting)
+- done - trait diffs are too coarse
+- done - enum variant diffs are too coarse (e.g. stuff like Fields aren't stored)
 - done - colored output - term
 - done - Identify freestanding function signature pieces
 - done - struct impl - fn
