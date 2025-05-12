@@ -60,6 +60,12 @@ enum Person {
     Idea,
 }
 
+enum Buddy {
+    Friend,
+    Pal,
+    Human,
+}
+
 // struct Thing<T, U>(T, U)
 // where
 //     U: Cake,

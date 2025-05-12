@@ -30,6 +30,8 @@ enum L7Protocol<T: Clone> {
 
 enum Buddy {
     Friend,
+    Pal,
+    Person,
 }
 
 struct Struct;
