@@ -307,21 +307,6 @@ impl View for ImplDiff {
             };
         }
 
-        let item_diffs = self.items_diff.as_ref().map(|id| id.fns_diff.as_viewable());
-        let mut old_item_diffs = vec![];
-        let mut new_item_diffs = vec![];
-
-        if let Some(ids) = item_diffs {
-            for diff in ids.vds.into_iter() {
-                if let Some(olds) = diff.old {
-                    old_item_diffs.extend(olds);
-                }
-                if let Some(news) = diff.new {
-                    new_item_diffs.extend(news);
-                }
-            }
-        } 
-
         let old = self.old.as_ref().unwrap();
         let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
 
@@ -332,7 +317,6 @@ impl View for ImplDiff {
         let mut i = decl_start;
         let mut src_i = 0;
         let mut old_diff = Vec::new();
-
 
         while i < decl_end {
             let maybe_diff_index = self.old_src_map[src_i..]
@@ -374,8 +358,8 @@ impl View for ImplDiff {
         
         if let Some(ids) = &self.items_diff {
             let mut i = decl_end;
-            let mut start = i;
-            while dbg!(i) < dbg!(old_range.end) {
+
+            while i < old_range.end {
                 let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.old().as_ref().map(|old_func| old_func.original().span().byte_range().contains(&i)).unwrap_or(false));
                 match maybe_item_diff {
                     Some(id) => {
@@ -390,19 +374,15 @@ impl View for ImplDiff {
                     }
                     None => {
                         if old_src[i].is_ascii_whitespace() {
-                            println!("got ascii whitespace");
-                            dbg!(i);
-                            start = i;
+                            let start = i;
                             while i < old_range.end && old_src[i].is_ascii_whitespace() {
                                 i += 1;
                             }
-                            dbg!(i);
 
                             let substring = old_src[start..i].to_vec();
                             let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
                             old_diff.push((None, code));
                         } else {
-                            println!("no ascii whitespace");
                             i += 1;
                         }
                     }
@@ -463,8 +443,7 @@ impl View for ImplDiff {
 
         if let Some(ids) = &self.items_diff {
             let mut i = decl_end;
-            let mut start = i;
-            while dbg!(i) < dbg!(new_range.end) {
+            while i < new_range.end {
                 let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.new().as_ref().map(|new_func| new_func.original().span().byte_range().contains(&i)).unwrap_or(false));
                 match maybe_item_diff {
                     Some(id) => {
@@ -479,19 +458,15 @@ impl View for ImplDiff {
                     }
                     None => {
                         if new_src[i].is_ascii_whitespace() {
-                            println!("got ascii whitespace");
-                            dbg!(i);
-                            start = i;
+                            let start = i;
                             while i < new_range.end && new_src[i].is_ascii_whitespace() {
                                 i += 1;
                             }
-                            dbg!(i);
 
                             let substring = new_src[start..i].to_vec();
                             let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
                             new_diff.push((None, code));
                         } else {
-                            println!("no ascii whitespace");
                             i += 1;
                         }
                     }
