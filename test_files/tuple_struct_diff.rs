@@ -35,6 +35,10 @@ impl Struct {
     fn new(field1: u32, field2: String) -> Self {
         Self { field1, field2 }
     }
+
+    fn milk(&self) -> Rice {
+        println!("run");
+    }
 }
 //struct Struct3;
 

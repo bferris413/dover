@@ -49,9 +49,10 @@ fn run_diff(command: Command) -> Result<()> {
         .into_iter()
         .filter(|c| c.path.extension().map_or(false, |ext| ext == "rs"));
 
-    for change in changes {
-        let path = change.path;
-        match change.change_type {
+
+    for changed_file in changes {
+        let path = changed_file.path;
+        match changed_file.change_type {
             GitChange::Modified {
                 before_contents,
                 after_contents,

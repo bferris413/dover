@@ -189,7 +189,11 @@ impl Function {
     pub fn name(&self) -> &str {
         &self.name
     }
+    pub fn original(&self) -> &ItemFn {
+        &self.original_fn
+    }
 }
+
 impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let source = remove_block(self.original_fn.span().source_text().expect(NO_SRC_ERROR));
@@ -274,6 +278,14 @@ pub struct FunctionDiff {
     old_src_map: Vec<Range<usize>>,
     new_src_map: Vec<Range<usize>>,
 }
+impl FunctionDiff {
+    pub(crate) fn old(&self) -> &Option<Function> {
+        &self.old
+    }
+    pub(crate) fn new(&self) -> &Option<Function> {
+        &self.new
+    }
+}
 
 impl View for FunctionDiff {
     fn as_viewable(&self) -> ViewableDiffs {
@@ -311,7 +323,7 @@ impl View for FunctionDiff {
         let mut i = old_range.start;
         let mut src_i = 0;
         let mut old_diff = Vec::new();
-        dbg!(&self.old_src_map);
+        // dbg!(&self.old_src_map);
 
         while i < old_range.end {
             let maybe_diff_index = self.old_src_map[src_i..]
@@ -632,6 +644,9 @@ impl ByteRange for FunctionsDiff {
 impl FunctionsDiff {
     pub(crate) fn is_empty(&self) -> bool {
         self.diffs.is_empty()
+    }
+    pub(crate) fn diffs(&self) -> &[FunctionDiff] {
+        &self.diffs
     }
 }
 

@@ -72,6 +72,7 @@ impl ViewableDiffs {
 
         let mut old = None;
         let mut new = None;
+
         if !collapsed_old.is_empty() {
             old = Some(collapsed_old);
         }
@@ -82,9 +83,10 @@ impl ViewableDiffs {
         self.vds = vec![ViewableDiff { old, new }];
     }
 }
+
 impl Display for ViewableDiffs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        dbg!(self);
+        // dbg!(self);
 
         // ---------------------------------------------------------------------------------
         //  None of this is optimized for readability or efficiency. It's barely working.  |
@@ -120,18 +122,18 @@ impl Display for ViewableDiffs {
                             let next = lines.next().unwrap();
                             match change {
                                 Some(ExistenceChange::Deleted) => {
-                                    println!("writing old del(1) {}", next.red());
+                                    // println!("writing old del(1) {}", next.red());
                                     plain_running_len += next.len();
                                     write!(running_string, "{}", next.red())?;
                                 }
                                 Some(ExistenceChange::Added) => panic!(),
                                 None => {
-                                    println!("writing old nil(1) {}", next.normal());
+                                    // println!("writing old nil(1) {}", next.normal());
                                     plain_running_len += next.len();
                                     write!(running_string, "{}", next.normal())?;
                                 }
                             }
-                            println!("pushing old(1) {running_string}");
+                            // println!("pushing old(1) {running_string}");
                             while plain_running_len < old_col_max_width {
                                 running_string.push(' ');
                                 plain_running_len += 1;
@@ -145,13 +147,13 @@ impl Display for ViewableDiffs {
                                         if lines.peek().is_some()
                                             || (lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
-                                            println!("pushing old del(1) {}", line.red());
+                                            // println!("pushing old del(1) {}", line.red());
                                             let gap = old_col_max_width.saturating_sub(line.len());
                                             let line = format!("{line}{}", " ".repeat(gap));
                                             colored_string.push(line.red().to_string());
                                         } else {
                                             // the last piece and not terminated with \n
-                                            println!("writing old del (2){}", line.red());
+                                            // println!("writing old del (2){}", line.red());
                                             plain_running_len += line.len();
                                             write!(running_string, "{}", line.red())?;
                                         }
@@ -161,13 +163,13 @@ impl Display for ViewableDiffs {
                                         if lines.peek().is_some()
                                             || (lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
-                                            println!("pushing old nil(1) {}", line.normal());
+                                            // println!("pushing old nil(1) {}", line.normal());
                                             let gap = old_col_max_width.saturating_sub(line.len());
                                             let line = format!("{line}{}", " ".repeat(gap));
                                             colored_string.push(line.normal().to_string())
                                         } else {
                                             // the last piece and not terminated with \n
-                                            println!("writing old nil (2){}", line.normal());
+                                            // println!("writing old nil (2){}", line.normal());
                                             plain_running_len += line.len();
                                             write!(running_string, "{}", line.normal())?;
                                         }
@@ -177,13 +179,13 @@ impl Display for ViewableDiffs {
                         } else {
                             match change {
                                 Some(ExistenceChange::Deleted) => {
-                                    println!("writing old del(3) {}", code.0.red());
+                                    // println!("writing old del(3) {}", code.0.red());
                                     plain_running_len += code.0.len();
                                     write!(running_string, "{}", code.0.red())?;
                                 }
                                 Some(ExistenceChange::Added) => panic!(),
                                 None => {
-                                    println!("writing old nil(3){}", code.0.normal());
+                                    // println!("writing old nil(3){}", code.0.normal());
                                     plain_running_len += code.0.len();
                                     write!(running_string, "{}", code.0.normal())?;
                                 }
@@ -216,16 +218,16 @@ impl Display for ViewableDiffs {
                             let next = lines.next().unwrap();
                             match change {
                                 Some(ExistenceChange::Added) => {
-                                    println!("writing new add(1){}", next.green());
+                                    // println!("writing new add(1){}", next.green());
                                     write!(running_string, "{}", next.green())?;
                                 }
                                 Some(ExistenceChange::Deleted) => panic!(),
                                 None => {
-                                    println!("writing new del(1){}", next.normal());
+                                    // println!("writing new del(1){}", next.normal());
                                     write!(running_string, "{}", next.normal())?;
                                 }
                             }
-                            println!("pushing new(1) {running_string}");
+                            // println!("pushing new(1) {running_string}");
                             colored_string.push(running_string.clone());
                             running_string.clear();
                             while let Some(line) = lines.next() {
@@ -234,11 +236,11 @@ impl Display for ViewableDiffs {
                                         if lines.peek().is_some()
                                             || (lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
-                                            println!("pushing new add(2){}", line.green());
+                                            // println!("pushing new add(2){}", line.green());
                                             colored_string.push(line.green().to_string());
                                         } else {
                                             // the last piece and not terminated with \n
-                                            println!("writing new add(2){}", line.green());
+                                            // println!("writing new add(2){}", line.green());
                                             write!(running_string, "{}", line.green())?;
                                         }
                                     }
@@ -247,11 +249,11 @@ impl Display for ViewableDiffs {
                                         if lines.peek().is_some()
                                             || (lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
-                                            println!("pushing {}", line.normal());
+                                            // println!("pushing {}", line.normal());
                                             colored_string.push(line.normal().to_string())
                                         } else {
                                             // the last piece and not terminated with \n
-                                            println!("writing new nil (2){}", line.normal());
+                                            // println!("writing new nil (2){}", line.normal());
                                             write!(running_string, "{}", line.normal())?;
                                         }
                                     }
@@ -260,12 +262,12 @@ impl Display for ViewableDiffs {
                         } else {
                             match change {
                                 Some(ExistenceChange::Added) => {
-                                    println!("writing {}", code.0.green());
+                                    // println!("writing {}", code.0.green());
                                     write!(running_string, "{}", code.0.green())?;
                                 }
                                 Some(ExistenceChange::Deleted) => panic!(),
                                 None => {
-                                    println!("writing {}", code.0.normal());
+                                    // println!("writing {}", code.0.normal());
                                     write!(running_string, "{}", code.0.normal())?;
                                 }
                             }
@@ -295,8 +297,8 @@ impl Display for ViewableDiffs {
             old_section.push(" ".repeat(old_col_max_width));
             new_section.push(String::new());
 
-            dbg!(&old_section);
-            dbg!(&new_section);
+            // dbg!(&old_section);
+            // dbg!(&new_section);
 
             old_col.append(&mut old_section);
             new_col.append(&mut new_section);
@@ -307,7 +309,8 @@ impl Display for ViewableDiffs {
         let mut formatted_output = String::new();
 
         for (left, right) in left_right {
-            let format_str = dbg!(format!("{left}      {right}\n"));
+            let format_str = format!("{left}      {right}\n");
+            // let format_str = dbg!(format!("{left}      {right}\n"));
             formatted_output.push_str(&format_str);
         }
 

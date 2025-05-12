@@ -15,7 +15,7 @@
 - attributes - trait
 - attributes - module
 - From<ImplItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
-- From<TraitItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
+- From<TraitItemFn> for Function - tricky, we're lossy converting TraitItemFn to ItemFn
 - remove irrelevant details from impls (like unmodified functions)
 - remove irrelevant details from structs
 - remove irrelevant details from enums

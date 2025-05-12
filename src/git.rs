@@ -59,6 +59,7 @@ pub fn get_changed_files(
         bail!("Couldn't get workdir from {}", repo_path.display());
     };
 
+
     let diff = match trees_to_diff {
         // emulates `git diff`
         None => repo
@@ -76,8 +77,11 @@ pub fn get_changed_files(
                     Some(Ok(oid)) => Some(oid),
                     None => None,
                 };
-                let c1_tree = repo.find_tree(c1_oid)?;
-                let c2_tree = c2_oid.map(|oid| repo.find_tree(oid));
+
+                // let c1_tree = dbg!(repo.find_tree(c1_oid))?;
+                let c1_tree = repo.find_commit(c1_oid).and_then(|c1| c1.tree())?;
+                let c2_tree = c2_oid.map(|oid| repo.find_commit(oid).and_then(|c| c.tree()));
+                // let c2_tree = c2_oid.map(|oid| repo.find_tree(oid));
 
                 if let Some(Err(e)) = c2_tree {
                     bail!("Couldn't find tree for commit2: {}", e);

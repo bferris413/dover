@@ -307,18 +307,34 @@ impl View for ImplDiff {
             };
         }
 
+        let item_diffs = self.items_diff.as_ref().map(|id| id.fns_diff.as_viewable());
+        let mut old_item_diffs = vec![];
+        let mut new_item_diffs = vec![];
+
+        if let Some(ids) = item_diffs {
+            for diff in ids.vds.into_iter() {
+                if let Some(olds) = diff.old {
+                    old_item_diffs.extend(olds);
+                }
+                if let Some(news) = diff.new {
+                    new_item_diffs.extend(news);
+                }
+            }
+        } 
+
         let old = self.old.as_ref().unwrap();
         let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
-        // if we want to remove the block we'd do it here
-        let old_range = old.span().byte_range();
-        // let old_end = old.original_fn.block.span().byte_range().start;
-        // let old_range = old_start..old_end;
 
-        let mut i = old_range.start;
+        let old_range = old.span().byte_range();
+        let decl_start = old_range.start;
+        let decl_end = old.brace_token.span.span().byte_range().start + 1;
+
+        let mut i = decl_start;
         let mut src_i = 0;
         let mut old_diff = Vec::new();
 
-        while i < old_range.end {
+
+        while i < decl_end {
             let maybe_diff_index = self.old_src_map[src_i..]
                 .iter()
                 .position(|r| r.contains(&i));
@@ -337,7 +353,7 @@ impl View for ImplDiff {
                 }
                 None => {
                     let start = i;
-                    while i < old_range.end {
+                    while i < decl_end {
                         let maybe_diff_index = self.old_src_map[src_i..]
                             .iter()
                             .position(|r| r.contains(&i));
@@ -355,19 +371,59 @@ impl View for ImplDiff {
                 }
             }
         }
+        
+        if let Some(ids) = &self.items_diff {
+            let mut i = decl_end;
+            let mut start = i;
+            while dbg!(i) < dbg!(old_range.end) {
+                let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.old().as_ref().map(|old_func| old_func.original().span().byte_range().contains(&i)).unwrap_or(false));
+                match maybe_item_diff {
+                    Some(id) => {
+                        let viewable = id.as_viewable();
+                        for diff in viewable.vds {
+                            if let Some(old) = diff.old {
+                                old_diff.extend(old);
+                            }
+                        }
+
+                        i = id.old().as_ref().unwrap().original().span().byte_range().end;
+                    }
+                    None => {
+                        if old_src[i].is_ascii_whitespace() {
+                            println!("got ascii whitespace");
+                            dbg!(i);
+                            start = i;
+                            while i < old_range.end && old_src[i].is_ascii_whitespace() {
+                                i += 1;
+                            }
+                            dbg!(i);
+
+                            let substring = old_src[start..i].to_vec();
+                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                            old_diff.push((None, code));
+                        } else {
+                            println!("no ascii whitespace");
+                            i += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        old_diff.push((None, Code("}\n".to_string())));
 
         let new = self.new.as_ref().unwrap();
         let new_src = &self.new_src.as_ref().unwrap().0.as_bytes();
-        // if we want to remove the block we'd do it here
-        let new_range = new.span().byte_range();
-        // let new_end = new.original_fn.block.span().byte_range().start;
-        // let new_range = new_start..new_end;
 
-        let mut i = new_range.start;
+        let new_range = new.span().byte_range();
+        let decl_start = new_range.start;
+        let decl_end = new.brace_token.span.span().byte_range().start + 1; // we'll take the "{"
+
+        let mut i = decl_start;
         let mut src_i = 0;
         let mut new_diff = Vec::new();
 
-        while i < new_range.end {
+        while i < decl_end {
             let maybe_diff_index = self.new_src_map[src_i..]
                 .iter()
                 .position(|r| r.contains(&i));
@@ -386,7 +442,7 @@ impl View for ImplDiff {
                 }
                 None => {
                     let start = i;
-                    while i < new_range.end {
+                    while i < decl_end {
                         let maybe_diff_index = self.new_src_map[src_i..]
                             .iter()
                             .position(|r| r.contains(&i));
@@ -404,6 +460,46 @@ impl View for ImplDiff {
                 }
             }
         }
+
+        if let Some(ids) = &self.items_diff {
+            let mut i = decl_end;
+            let mut start = i;
+            while dbg!(i) < dbg!(new_range.end) {
+                let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.new().as_ref().map(|new_func| new_func.original().span().byte_range().contains(&i)).unwrap_or(false));
+                match maybe_item_diff {
+                    Some(id) => {
+                        let viewable = id.as_viewable();
+                        for diff in viewable.vds {
+                            if let Some(new) = diff.new {
+                                new_diff.extend(new);
+                            }
+                        }
+
+                        i = id.new().as_ref().unwrap().original().span().byte_range().end;
+                    }
+                    None => {
+                        if new_src[i].is_ascii_whitespace() {
+                            println!("got ascii whitespace");
+                            dbg!(i);
+                            start = i;
+                            while i < new_range.end && new_src[i].is_ascii_whitespace() {
+                                i += 1;
+                            }
+                            dbg!(i);
+
+                            let substring = new_src[start..i].to_vec();
+                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                            new_diff.push((None, code));
+                        } else {
+                            println!("no ascii whitespace");
+                            i += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        new_diff.push((None, Code("}\n".to_string())));
 
         ViewableDiffs::new(vec![ViewableDiff {
             old: Some(old_diff),
