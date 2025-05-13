@@ -290,7 +290,7 @@ impl View for ImplDiff {
             };
 
             let source = i.span().source_text().expect(NO_SRC_ERROR);
-            let change = vec![(Some(ex), Code(format!("{source}\n")))];
+            let change = vec![(Some(ex), Code(format!("{source}")))];
             match ex {
                 ExistenceChange::Deleted => {
                     return ViewableDiffs::new(vec![ViewableDiff {

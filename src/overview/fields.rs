@@ -1,8 +1,10 @@
 use std::ops::Range;
 
-use crate::{ByteRange, Change, Diff, ExistenceChange};
+use crate::{ByteRange, Change, Code, Diff, ExistenceChange, View, ViewableDiff, ViewableDiffs};
 
 use syn::{spanned::Spanned, FieldMutability, Type};
+
+const NO_SRC_ERROR: &str = "No source text for field, was parse logic changed?";
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Fields(pub Vec<syn::Field>);
@@ -19,21 +21,23 @@ impl Diff for Fields {
         loop {
             match (self.0.get(i), other.0.get(i)) {
                 (Some(f1), Some(f2)) => {
-                    diffs.push(f1.diff_with(f2));
+                    if let Some(diff) = f1.diff_with(f2) {
+                        diffs.push(diff);
+                    }
                 }
                 (Some(f1), None) => {
-                    diffs.push(Some(FieldDiff {
+                    diffs.push(FieldDiff {
                         old: Some(f1.clone()),
                         new: None,
                         change: Change::Existence(ExistenceChange::Deleted),
-                    }));
+                    });
                 }
                 (None, Some(f2)) => {
-                    diffs.push(Some(FieldDiff {
+                    diffs.push(FieldDiff {
                         new: Some(f2.clone()),
                         old: None,
                         change: Change::Existence(ExistenceChange::Added),
-                    }));
+                    });
                 }
                 (None, None) => break,
             }
@@ -51,16 +55,14 @@ impl Diff for Fields {
 /// This is a list of field diffs, where each field diff is either `None` (no change) or a `FieldDiff`.
 #[derive(Debug, Eq, PartialEq)]
 pub struct FieldsDiff {
-    diffs: Vec<Option<FieldDiff>>,
+    diffs: Vec<FieldDiff>,
 }
 impl ByteRange for FieldsDiff {
     fn old_ranges(&self) -> Vec<Range<usize>> {
         let mut ranges = vec![];
         for diff in &self.diffs {
-            if let Some(diff) = diff {
-                let old_ranges = diff.old_ranges();
-                ranges.extend(old_ranges);
-            }
+            let old_ranges = diff.old_ranges();
+            ranges.extend(old_ranges);
         }
 
         ranges
@@ -69,10 +71,8 @@ impl ByteRange for FieldsDiff {
     fn new_ranges(&self) -> Vec<Range<usize>> {
         let mut ranges = vec![];
         for diff in &self.diffs {
-            if let Some(diff) = diff {
-                let new_ranges = diff.new_ranges();
-                ranges.extend(new_ranges);
-            }
+            let new_ranges = diff.new_ranges();
+            ranges.extend(new_ranges);
         }
 
         ranges
@@ -80,7 +80,7 @@ impl ByteRange for FieldsDiff {
 }
 #[allow(unused)]
 impl FieldsDiff {
-    pub fn diffs(&self) -> &[Option<FieldDiff>] {
+    pub fn diffs(&self) -> &[FieldDiff] {
         &self.diffs
     }
 }
@@ -118,6 +118,23 @@ impl FieldDiff {
     }
     pub fn new(&self) -> Option<&syn::Field> {
         self.new.as_ref()
+    }
+}
+impl View for FieldDiff {
+    fn as_viewable(&self) -> crate::ViewableDiffs {
+        let old = self.old().map(|field| {
+            let source = field.span().source_text().expect(NO_SRC_ERROR);
+            vec![(Some(ExistenceChange::Deleted), Code(format!("{source}")))]
+        });
+        let new = self.new().map(|field| {
+            let source = field.span().source_text().expect(NO_SRC_ERROR);
+            vec![(Some(ExistenceChange::Added), Code(format!("{source}")))]
+        });
+
+        ViewableDiffs::new(vec![ViewableDiff {
+            old,
+            new,
+        }])
     }
 }
 impl ByteRange for FieldDiff {

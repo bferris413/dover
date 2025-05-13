@@ -26,6 +26,7 @@ enum L7Protocol<T: Clone> {
     Http { t: T },
     Https {},
     Stun,
+    Smtp
 }
 
 enum Buddy {

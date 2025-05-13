@@ -305,15 +305,15 @@ impl View for EnumDiff {
             while i < old_range.end {
                 let maybe_item_diff = vdiffs.diffs().iter().find(|d| d.old().as_ref().map(|old_variant| old_variant.original().span().byte_range().contains(&i)).unwrap_or(false));
                 match maybe_item_diff {
-                    Some(id) => {
-                        let viewable = id.as_viewable();
+                    Some(variant_diff) => {
+                        let viewable = variant_diff.as_viewable();
                         for diff in viewable.vds {
                             if let Some(old) = diff.old {
                                 old_diff.extend(old);
                             }
                         }
 
-                        i = id.old().as_ref().unwrap().original().span().byte_range().end;
+                        i = variant_diff.old().as_ref().unwrap().original().span().byte_range().end;
                     }
                     None => {
                         if old_src[i].is_ascii_whitespace() {

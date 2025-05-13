@@ -233,7 +233,7 @@ impl View for StructDiff {
             };
 
             let source = _struct.span().source_text().expect(NO_SRC_ERROR);
-            let change = vec![(Some(ex), Code(format!("{source}\n")))];
+            let change = vec![(Some(ex), Code(format!("{source}")))];
             match ex {
                 ExistenceChange::Deleted => {
                     return ViewableDiffs::new(vec![ViewableDiff {
@@ -252,16 +252,21 @@ impl View for StructDiff {
 
         let old = self.old.as_ref().unwrap();
         let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
-        // if we want to remove the block we'd do it here
-        let old_range = old.span().byte_range();
-        // let old_end = old.original_fn.block.span().byte_range().start;
-        // let old_range = old_start..old_end;
 
-        let mut i = old_range.start;
+        let old_range = old.span().byte_range();
+        let decl_start = old_range.start;
+        dbg!(old);
+        let decl_end = match &old.fields {
+            syn::Fields::Named(fields_named) => fields_named.brace_token.span.span().byte_range().start + 1,
+            syn::Fields::Unnamed(fields_unnamed) => fields_unnamed.paren_token.span.span().byte_range().start + 1,
+            syn::Fields::Unit => old.span().byte_range().end,
+        };
+
+        let mut i = decl_start;
         let mut src_i = 0;
         let mut old_diff = Vec::new();
 
-        while i < old_range.end {
+        while i < decl_end {
             let maybe_diff_index = self.old_src_map[src_i..]
                 .iter()
                 .position(|r| r.contains(&i));
@@ -280,7 +285,7 @@ impl View for StructDiff {
                 }
                 None => {
                     let start = i;
-                    while i < old_range.end {
+                    while i < decl_end {
                         let maybe_diff_index = self.old_src_map[src_i..]
                             .iter()
                             .position(|r| r.contains(&i));
@@ -298,19 +303,63 @@ impl View for StructDiff {
                 }
             }
         }
+        
+        if let Some(field_diffs) = &self.fields_diff {
+            let mut i = decl_end;
+
+            while i < old_range.end {
+                let maybe_item_diff = field_diffs.diffs().iter().find(|d| d.old().as_ref().map(|old_variant| old_variant.span().byte_range().contains(&i)).unwrap_or(false));
+                match maybe_item_diff {
+                    Some(id) => {
+                        let viewable = id.as_viewable();
+                        for diff in viewable.vds {
+                            if let Some(old) = diff.old {
+                                old_diff.extend(old);
+                            }
+                        }
+
+                        i = id.old().as_ref().unwrap().span().byte_range().end;
+                    }
+                    None => {
+                        if old_src[i].is_ascii_whitespace() {
+                            let start = i;
+                            while i < old_range.end && old_src[i].is_ascii_whitespace() {
+                                i += 1;
+                            }
+
+                            let substring = old_src[start..i].to_vec();
+                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                            old_diff.push((None, code));
+                        } else {
+                            i += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        match &old.fields {
+            syn::Fields::Named(_) => old_diff.push((None, Code("}\n".to_string()))),
+            syn::Fields::Unnamed(_) => old_diff.push((None, Code(")\n".to_string()))),
+            _ => {}
+        }
 
         let new = self.new.as_ref().unwrap();
         let new_src = &self.new_src.as_ref().unwrap().0.as_bytes();
-        // if we want to remove the block we'd do it here
-        let new_range = new.span().byte_range();
-        // let new_end = new.original_fn.block.span().byte_range().start;
-        // let new_range = new_start..new_end;
 
-        let mut i = new_range.start;
+        let new_range = new.span().byte_range();
+        let decl_start = new_range.start;
+        let decl_end = match &new.fields {
+            syn::Fields::Named(fields_named) => fields_named.brace_token.span.span().byte_range().start + 1,
+            syn::Fields::Unnamed(fields_unnamed) => fields_unnamed.paren_token.span.span().byte_range().start + 1,
+            syn::Fields::Unit => new.span().byte_range().end,
+        };
+
+        let mut i = decl_start;
         let mut src_i = 0;
         let mut new_diff = Vec::new();
 
-        while i < new_range.end {
+        while i < decl_end {
             let maybe_diff_index = self.new_src_map[src_i..]
                 .iter()
                 .position(|r| r.contains(&i));
@@ -329,7 +378,7 @@ impl View for StructDiff {
                 }
                 None => {
                     let start = i;
-                    while i < new_range.end {
+                    while i < decl_end {
                         let maybe_diff_index = self.new_src_map[src_i..]
                             .iter()
                             .position(|r| r.contains(&i));
@@ -346,6 +395,45 @@ impl View for StructDiff {
                     new_diff.push((None, code));
                 }
             }
+        }
+
+        if let Some(fds) = &self.fields_diff {
+            let mut i = decl_end;
+            while i < new_range.end {
+                let maybe_item_diff = fds.diffs().iter().find(|d| d.new().as_ref().map(|new_func| new_func.span().byte_range().contains(&i)).unwrap_or(false));
+                match maybe_item_diff {
+                    Some(id) => {
+                        let viewable = id.as_viewable();
+                        for diff in viewable.vds {
+                            if let Some(new) = diff.new {
+                                new_diff.extend(new);
+                            }
+                        }
+
+                        i = id.new().as_ref().unwrap().span().byte_range().end;
+                    }
+                    None => {
+                        if new_src[i].is_ascii_whitespace() {
+                            let start = i;
+                            while i < new_range.end && new_src[i].is_ascii_whitespace() {
+                                i += 1;
+                            }
+
+                            let substring = new_src[start..i].to_vec();
+                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                            new_diff.push((None, code));
+                        } else {
+                            i += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        match &new.fields {
+            syn::Fields::Named(_) => new_diff.push((None, Code("}\n".to_string()))),
+            syn::Fields::Unnamed(_) => new_diff.push((None, Code(")\n".to_string()))),
+            _ => {}
         }
 
         ViewableDiffs::new(vec![ViewableDiff {

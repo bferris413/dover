@@ -26,7 +26,7 @@ fn cake() {}
 //     i
 // }
 
-struct Struct2;
+// struct Struct2;
 struct Struct {
     field1: u32,
     field2: String,
