@@ -40,6 +40,18 @@ impl Struct {
         println!("run");
     }
 }
+
+impl SanityCheck {
+    pub fn sanity_check(&self) -> DoThing {
+        println!("hello");
+    }
+}
+
+impl View for SanityCheck {
+    fn run(&self) -> Rice {
+        Rice::new(eggs)
+    }
+}
 //struct Struct3;
 
 trait Milkshake {

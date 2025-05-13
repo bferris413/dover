@@ -255,7 +255,6 @@ impl View for StructDiff {
 
         let old_range = old.span().byte_range();
         let decl_start = old_range.start;
-        dbg!(old);
         let decl_end = match &old.fields {
             syn::Fields::Named(fields_named) => fields_named.brace_token.span.span().byte_range().start + 1,
             syn::Fields::Unnamed(fields_unnamed) => fields_unnamed.paren_token.span.span().byte_range().start + 1,

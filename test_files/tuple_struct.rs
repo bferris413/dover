@@ -28,6 +28,11 @@ enum L7Protocol<T: Clone> {
     Stun,
     Smtp
 }
+// impl SanityCheck {
+//     pub fn rice() -> () {
+//         ()
+//     }
+// }
 
 enum Buddy {
     Friend,

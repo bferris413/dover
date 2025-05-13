@@ -96,7 +96,7 @@ impl Diff for Impls {
         // file2
         // Everything here is either new or already accounted for
         for impl_ in &other.impls {
-            if let None = self.impls.iter().find(|i| i.self_ty == impl_.self_ty) {
+            if let None = self.impls.iter().find(|i| i.self_ty == impl_.self_ty && i.trait_ == impl_.trait_) {
                 let sdiff = ImplDiff {
                     change: Change::Existence(ExistenceChange::Added),
                     new: Some(impl_.original.clone()),
@@ -136,6 +136,7 @@ impl Impl {
         let trait_ = i.trait_.clone();
         let self_ty = i.self_ty.clone();
         let items = i.items.clone();
+        println!("impl {:?} for {:?}", i.clone().trait_.map(|t| t.1), i.self_ty);
         Impl {
             original: i,
             unsafety,
@@ -244,9 +245,12 @@ impl View for ImplsDiff {
             .filter(|diff| matches!(diff.change, Change::Existence(_)));
 
         let mut viewables = ViewableDiffs::empty();
+        let mut count = 0;
         for ex_diff in ex_diffs {
             viewables.append(ex_diff.as_viewable());
+            count += 1;
         }
+        println!("impls - ex(add/delete) diffs: {count}");
 
         // add/delete diffs should be side-by-side
         viewables.collapse();
@@ -256,9 +260,13 @@ impl View for ImplsDiff {
             .iter()
             .filter(|diff| matches!(diff.change, Change::Modified));
 
+        let mut count = 0;
         for mod_diff in mod_diffs {
             viewables.append(mod_diff.as_viewable());
+            count += 1;
         }
+        
+        println!("impls - modified diffs: {count}");
 
         viewables
     }
@@ -290,7 +298,7 @@ impl View for ImplDiff {
             };
 
             let source = i.span().source_text().expect(NO_SRC_ERROR);
-            let change = vec![(Some(ex), Code(format!("{source}")))];
+            let change = vec![(Some(ex), Code(format!("{source}\n")))];
             match ex {
                 ExistenceChange::Deleted => {
                     return ViewableDiffs::new(vec![ViewableDiff {
