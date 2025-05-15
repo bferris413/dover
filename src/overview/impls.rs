@@ -16,8 +16,6 @@ use super::{
     generics::{Generics, GenericsDiff},
 };
 
-const NO_SRC_ERROR: &str = "No source text for impl, was parse logic changed?";
-
 #[derive(Debug)]
 pub struct Impls {
     impls: Vec<Impl>,
@@ -82,13 +80,51 @@ impl Diff for Impls {
 
                 None => {
                     // impl was deleted
-                    let impl_diff = ImplDiff {
-                        change: Change::Existence(ExistenceChange::Deleted),
-                        old: Some(impl_.original.clone()),
-                        old_src: Some(impl_.source.clone()),
-                        ..Default::default()
+                    let unsafe_diff: Option<UnsafeDiff> = None;
+                    let generics_diff:  Option<GenericsDiff> = None;
+                    let items_diff = {
+                        // TODO: only supports functions
+                        let self_fn_items: Vec<_> = impl_
+                            .items
+                            .iter()
+                            .filter_map(|i| match i {
+                                ImplItem::Fn(func) => Some(func.clone()),
+                                _ => None,
+                            })
+                            .collect();
+
+                        let other_items_fns = Functions::new_impl(vec![], impl_.source.clone());
+                        // TODO: using impl_.source here because I don't have source here, fix this.
+                        let self_items_fns = Functions::new_impl(self_fn_items, impl_.source.clone());
+                        let fns_diff = self_items_fns.diff_with(&other_items_fns);
+
+                        if fns_diff.is_empty() {
+                            None
+                        } else {
+                            Some(ImplItemsDiff { fns_diff })
+                        }
                     };
-                    impl_diffs.push(impl_diff);
+
+                    if unsafe_diff.is_none() && generics_diff.is_none() && items_diff.is_none() {
+                        continue;
+                    } else {
+                        // take all the diffs, if old/new exists, get byte range and store in vec
+                        let (old_src_map, new_src_map) =
+                            collect_src_maps!(unsafe_diff, generics_diff, items_diff,);
+                        let diff = ImplDiff {
+                            change: Change::Existence(ExistenceChange::Deleted),
+                            old: Some(impl_.original.clone()),
+                            old_src: Some(impl_.source.clone()),
+                            new: None,
+                            new_src: None,
+                            unsafe_diff,
+                            generics_diff,
+                            items_diff,
+                            old_src_map,
+                            new_src_map,
+                        };
+                        impl_diffs.push(diff)
+                    }
                 }
             }
         }
@@ -97,13 +133,52 @@ impl Diff for Impls {
         // Everything here is either new or already accounted for
         for impl_ in &other.impls {
             if let None = self.impls.iter().find(|i| i.self_ty == impl_.self_ty && i.trait_ == impl_.trait_) {
-                let sdiff = ImplDiff {
-                    change: Change::Existence(ExistenceChange::Added),
-                    new: Some(impl_.original.clone()),
-                    new_src: Some(impl_.source.clone()),
-                    ..Default::default()
+                // impl was added
+                let unsafe_diff: Option<UnsafeDiff> = None;
+                let generics_diff:  Option<GenericsDiff> = None;
+                let items_diff = {
+                    // TODO: only supports functions
+                    let self_fn_items: Vec<_> = impl_
+                        .items
+                        .iter()
+                        .filter_map(|i| match i {
+                            ImplItem::Fn(func) => Some(func.clone()),
+                            _ => None,
+                        })
+                        .collect();
+
+                    // TODO: using impl_.source here because I don't have source here, fix this.
+                    let other_items_fns = Functions::new_impl(vec![], impl_.source.clone());
+                    let self_items_fns = Functions::new_impl(self_fn_items, impl_.source.clone());
+                    let fns_diff = other_items_fns.diff_with(&self_items_fns);
+
+                    if fns_diff.is_empty() {
+                        None
+                    } else {
+                        Some(ImplItemsDiff { fns_diff })
+                    }
                 };
-                impl_diffs.push(sdiff);
+
+                if unsafe_diff.is_none() && generics_diff.is_none() && items_diff.is_none() {
+                    continue;
+                } else {
+                    // take all the diffs, if old/new exists, get byte range and store in vec
+                    let (old_src_map, new_src_map) =
+                        collect_src_maps!(unsafe_diff, generics_diff, items_diff,);
+                    let diff = ImplDiff {
+                        change: Change::Existence(ExistenceChange::Added),
+                        new: Some(impl_.original.clone()),
+                        old: None,
+                        unsafe_diff,
+                        generics_diff,
+                        items_diff,
+                        new_src: Some(impl_.source.clone()),
+                        old_src: None,
+                        old_src_map,
+                        new_src_map,
+                    };
+                    impl_diffs.push(diff)
+                }
             }
         }
 
@@ -136,7 +211,6 @@ impl Impl {
         let trait_ = i.trait_.clone();
         let self_ty = i.self_ty.clone();
         let items = i.items.clone();
-        println!("impl {:?} for {:?}", i.clone().trait_.map(|t| t.1), i.self_ty);
         Impl {
             original: i,
             unsafety,
@@ -152,10 +226,6 @@ impl Diff for Impl {
     type Diff = Option<ImplDiff>;
 
     fn diff_with(&self, other: &Self) -> Self::Diff {
-        if self == other {
-            return None;
-        }
-
         if self.self_ty != other.self_ty {
             // impls for two different types
             return None;
@@ -171,34 +241,34 @@ impl Diff for Impl {
         let items_diff = {
             // TODO: only supports functions
             if self.items == other.items {
-                return None;
-            }
-
-            let self_fn_items: Vec<_> = self
-                .items
-                .iter()
-                .filter_map(|i| match i {
-                    ImplItem::Fn(func) => Some(func.clone()),
-                    _ => None,
-                })
-                .collect();
-            let other_fn_items: Vec<_> = other
-                .items
-                .iter()
-                .filter_map(|i| match i {
-                    ImplItem::Fn(func) => Some(func.clone()),
-                    _ => None,
-                })
-                .collect();
-
-            let self_items_fns = Functions::new_impl(self_fn_items, self.source.clone());
-            let other_items_fns = Functions::new_impl(other_fn_items, other.source.clone());
-
-            let fns_diff = self_items_fns.diff_with(&other_items_fns);
-            if fns_diff.is_empty() {
                 None
             } else {
-                Some(ImplItemsDiff { fns_diff })
+                let self_fn_items: Vec<_> = self
+                    .items
+                    .iter()
+                    .filter_map(|i| match i {
+                        ImplItem::Fn(func) => Some(func.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                let other_fn_items: Vec<_> = other
+                    .items
+                    .iter()
+                    .filter_map(|i| match i {
+                        ImplItem::Fn(func) => Some(func.clone()),
+                        _ => None,
+                    })
+                    .collect();
+
+                let self_items_fns = Functions::new_impl(self_fn_items, self.source.clone());
+                let other_items_fns = Functions::new_impl(other_fn_items, other.source.clone());
+
+                let fns_diff = self_items_fns.diff_with(&other_items_fns);
+                if fns_diff.is_empty() {
+                    None
+                } else {
+                    Some(ImplItemsDiff { fns_diff })
+                }
             }
         };
 
@@ -245,12 +315,9 @@ impl View for ImplsDiff {
             .filter(|diff| matches!(diff.change, Change::Existence(_)));
 
         let mut viewables = ViewableDiffs::empty();
-        let mut count = 0;
         for ex_diff in ex_diffs {
             viewables.append(ex_diff.as_viewable());
-            count += 1;
         }
-        println!("impls - ex(add/delete) diffs: {count}");
 
         // add/delete diffs should be side-by-side
         viewables.collapse();
@@ -260,14 +327,10 @@ impl View for ImplsDiff {
             .iter()
             .filter(|diff| matches!(diff.change, Change::Modified));
 
-        let mut count = 0;
         for mod_diff in mod_diffs {
             viewables.append(mod_diff.as_viewable());
-            count += 1;
         }
         
-        println!("impls - modified diffs: {count}");
-
         viewables
     }
 }
@@ -290,203 +353,204 @@ pub struct ImplDiff {
 }
 impl View for ImplDiff {
     fn as_viewable(&self) -> ViewableDiffs {
-        if let Change::Existence(ex) = self.change {
-            let i = match (&self.old, &self.new) {
-                (Some(_), Some(_)) => panic!("old and new impls were both Some"),
-                (None, None) => panic!("old and new impls were both None"),
-                (Some(i), None) | (None, Some(i)) => i,
-            };
-
-            let source = i.span().source_text().expect(NO_SRC_ERROR);
-            let change = vec![(Some(ex), Code(format!("{source}\n")))];
-            match ex {
-                ExistenceChange::Deleted => {
-                    return ViewableDiffs::new(vec![ViewableDiff {
-                        old: Some(change),
-                        new: None,
-                    }])
-                }
-                ExistenceChange::Added => {
-                    return ViewableDiffs::new(vec![ViewableDiff {
-                        old: None,
-                        new: Some(change),
-                    }])
-                }
-            };
-        }
-
-        let old = self.old.as_ref().unwrap();
-        let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
-
-        let old_range = old.span().byte_range();
-        let decl_start = old_range.start;
-        let decl_end = old.brace_token.span.span().byte_range().start + 1;
-
-        let mut i = decl_start;
-        let mut src_i = 0;
         let mut old_diff = Vec::new();
+        if let Some(old) = self.old.as_ref() {
+            let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
 
-        while i < decl_end {
-            let maybe_diff_index = self.old_src_map[src_i..]
-                .iter()
-                .position(|r| r.contains(&i));
-            match maybe_diff_index {
-                Some(diff_index) => {
-                    let diff_range = &self.old_src_map[src_i..][diff_index];
+            let old_range = old.span().byte_range();
+            let decl_start = old_range.start;
+            let decl_end = old.brace_token.span.span().byte_range().start + 1;
 
-                    // doesn't make sense that we wouldn't be aligned with the start of a range
-                    assert_eq!(i, diff_range.start);
-                    let substring = old_src[i..diff_range.end].to_vec();
-                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                    old_diff.push((Some(ExistenceChange::Deleted), code));
+            let mut i = decl_start;
+            let mut src_i = 0;
 
-                    src_i = diff_index + 1;
-                    i = diff_range.end;
-                }
-                None => {
-                    let start = i;
-                    while i < decl_end {
-                        let maybe_diff_index = self.old_src_map[src_i..]
-                            .iter()
-                            .position(|r| r.contains(&i));
-                        if maybe_diff_index.is_some() {
-                            break;
-                        } else {
-                            i += 1
-                        }
-                    }
-                    // We're either off the end or we've found a new diff. Either way,
-                    // start..i contains our next range
-                    let substring = old_src[start..i].to_vec();
-                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                    old_diff.push((None, code));
-                }
-            }
-        }
-        
-        if let Some(ids) = &self.items_diff {
-            let mut i = decl_end;
+            while i < decl_end {
+                let maybe_diff_index = self.old_src_map[src_i..]
+                    .iter()
+                    .position(|r| r.contains(&i));
+                match maybe_diff_index {
+                    Some(diff_index) => {
+                        let diff_range = &self.old_src_map[src_i..][diff_index];
 
-            while i < old_range.end {
-                let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.old().as_ref().map(|old_func| old_func.original().span().byte_range().contains(&i)).unwrap_or(false));
-                match maybe_item_diff {
-                    Some(id) => {
-                        let viewable = id.as_viewable();
-                        for diff in viewable.vds {
-                            if let Some(old) = diff.old {
-                                old_diff.extend(old);
-                            }
-                        }
+                        // doesn't make sense that we wouldn't be aligned with the start of a range
+                        assert_eq!(i, diff_range.start);
+                        let substring = old_src[i..diff_range.end].to_vec();
+                        let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                        old_diff.push((Some(ExistenceChange::Deleted), code));
 
-                        i = id.old().as_ref().unwrap().original().span().byte_range().end;
+                        src_i = diff_index + 1;
+                        i = diff_range.end;
                     }
                     None => {
-                        if old_src[i].is_ascii_whitespace() {
-                            let start = i;
-                            while i < old_range.end && old_src[i].is_ascii_whitespace() {
-                                i += 1;
+                        let start = i;
+                        while i < decl_end {
+                            let maybe_diff_index = self.old_src_map[src_i..]
+                                .iter()
+                                .position(|r| r.contains(&i));
+                            if maybe_diff_index.is_some() {
+                                break;
+                            } else {
+                                i += 1
                             }
+                        }
+                        // We're either off the end or we've found a new diff. Either way,
+                        // start..i contains our next range
+                        let substring = old_src[start..i].to_vec();
+                        let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
 
-                            let substring = old_src[start..i].to_vec();
-                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                        if let Change::Existence(ExistenceChange::Deleted) = self.change {
+                            old_diff.push((Some(ExistenceChange::Deleted), code));
+                        } else {
+                            assert!(matches!(self.change, Change::Modified));
                             old_diff.push((None, code));
-                        } else {
-                            i += 1;
                         }
                     }
                 }
             }
-        }
+            
+            if let Some(ids) = &self.items_diff {
+                let mut i = decl_end;
 
-        old_diff.push((None, Code("}\n".to_string())));
-
-        let new = self.new.as_ref().unwrap();
-        let new_src = &self.new_src.as_ref().unwrap().0.as_bytes();
-
-        let new_range = new.span().byte_range();
-        let decl_start = new_range.start;
-        let decl_end = new.brace_token.span.span().byte_range().start + 1; // we'll take the "{"
-
-        let mut i = decl_start;
-        let mut src_i = 0;
-        let mut new_diff = Vec::new();
-
-        while i < decl_end {
-            let maybe_diff_index = self.new_src_map[src_i..]
-                .iter()
-                .position(|r| r.contains(&i));
-            match maybe_diff_index {
-                Some(diff_index) => {
-                    let diff_range = &self.new_src_map[src_i..][diff_index];
-
-                    // doesn't make sense that we wouldn't be aligned with the start of a range
-                    assert_eq!(i, diff_range.start);
-                    let substring = new_src[i..diff_range.end].to_vec();
-                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                    new_diff.push((Some(ExistenceChange::Added), code));
-
-                    src_i = diff_index + 1;
-                    i = diff_range.end;
-                }
-                None => {
-                    let start = i;
-                    while i < decl_end {
-                        let maybe_diff_index = self.new_src_map[src_i..]
-                            .iter()
-                            .position(|r| r.contains(&i));
-                        if maybe_diff_index.is_some() {
-                            break;
-                        } else {
-                            i += 1
-                        }
-                    }
-                    // We're either off the end or we've found a new diff. Either way,
-                    // start..i contains our next range
-                    let substring = new_src[start..i].to_vec();
-                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                    new_diff.push((None, code));
-                }
-            }
-        }
-
-        if let Some(ids) = &self.items_diff {
-            let mut i = decl_end;
-            while i < new_range.end {
-                let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.new().as_ref().map(|new_func| new_func.original().span().byte_range().contains(&i)).unwrap_or(false));
-                match maybe_item_diff {
-                    Some(id) => {
-                        let viewable = id.as_viewable();
-                        for diff in viewable.vds {
-                            if let Some(new) = diff.new {
-                                new_diff.extend(new);
+                while i < old_range.end {
+                    let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.old().as_ref().map(|old_func| old_func.original().span().byte_range().contains(&i)).unwrap_or(false));
+                    match maybe_item_diff {
+                        Some(id) => {
+                            let viewable = id.as_viewable();
+                            for diff in viewable.vds {
+                                if let Some(old) = diff.old {
+                                    old_diff.extend(old);
+                                }
                             }
-                        }
 
-                        i = id.new().as_ref().unwrap().original().span().byte_range().end;
-                    }
-                    None => {
-                        if new_src[i].is_ascii_whitespace() {
-                            let start = i;
-                            while i < new_range.end && new_src[i].is_ascii_whitespace() {
+                            i = id.old().as_ref().unwrap().original().span().byte_range().end;
+                        }
+                        None => {
+                            if old_src[i].is_ascii_whitespace() {
+                                let start = i;
+                                while i < old_range.end && old_src[i].is_ascii_whitespace() {
+                                    i += 1;
+                                }
+
+                                let substring = old_src[start..i].to_vec();
+                                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                                old_diff.push((None, code));
+                            } else {
                                 i += 1;
                             }
-
-                            let substring = new_src[start..i].to_vec();
-                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                            new_diff.push((None, code));
-                        } else {
-                            i += 1;
                         }
                     }
                 }
             }
+
+
+            if let Change::Existence(ExistenceChange::Deleted) = self.change {
+                old_diff.push((Some(ExistenceChange::Deleted), Code("}\n".to_string())));
+            } else {
+                assert!(matches!(self.change, Change::Modified));
+                old_diff.push((None, Code("}\n".to_string())));
+            }
         }
 
-        new_diff.push((None, Code("}\n".to_string())));
+        let mut new_diff = Vec::new();
+        if let Some(new) = self.new.as_ref() {
+            let new_src = &self.new_src.as_ref().unwrap().0.as_bytes();
+
+            let new_range = new.span().byte_range();
+            let decl_start = new_range.start;
+            let decl_end = new.brace_token.span.span().byte_range().start + 1; // we'll take the "{"
+
+            let mut i = decl_start;
+            let mut src_i = 0;
+
+            while i < decl_end {
+                let maybe_diff_index = self.new_src_map[src_i..]
+                    .iter()
+                    .position(|r| r.contains(&i));
+                match maybe_diff_index {
+                    Some(diff_index) => {
+                        let diff_range = &self.new_src_map[src_i..][diff_index];
+
+                        // doesn't make sense that we wouldn't be aligned with the start of a range
+                        assert_eq!(i, diff_range.start);
+                        let substring = new_src[i..diff_range.end].to_vec();
+                        let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                        new_diff.push((Some(ExistenceChange::Added), code));
+
+                        src_i = diff_index + 1;
+                        i = diff_range.end;
+                    }
+                    None => {
+                        let start = i;
+                        while i < decl_end {
+                            let maybe_diff_index = self.new_src_map[src_i..]
+                                .iter()
+                                .position(|r| r.contains(&i));
+                            if maybe_diff_index.is_some() {
+                                break;
+                            } else {
+                                i += 1
+                            }
+                        }
+                        // We're either off the end or we've found a new diff. Either way,
+                        // start..i contains our next range
+                        let substring = new_src[start..i].to_vec();
+                        let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+
+                        if let Change::Existence(ExistenceChange::Added) = self.change {
+                            new_diff.push((Some(ExistenceChange::Added), code));
+                        } else {
+                            assert!(matches!(self.change, Change::Modified));
+                            new_diff.push((None, code));
+                        }
+                    }
+                }
+            }
+
+            if let Some(ids) = &self.items_diff {
+                let mut i = decl_end;
+                while i < new_range.end {
+                    let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.new().as_ref().map(|new_func| new_func.original().span().byte_range().contains(&i)).unwrap_or(false));
+                    match maybe_item_diff {
+                        Some(id) => {
+                            let viewable = id.as_viewable();
+                            for diff in viewable.vds {
+                                if let Some(new) = diff.new {
+                                    new_diff.extend(new);
+                                }
+                            }
+
+                            i = id.new().as_ref().unwrap().original().span().byte_range().end;
+                        }
+                        None => {
+                            if new_src[i].is_ascii_whitespace() {
+                                let start = i;
+                                while i < new_range.end && new_src[i].is_ascii_whitespace() {
+                                    i += 1;
+                                }
+
+                                let substring = new_src[start..i].to_vec();
+                                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                                new_diff.push((None, code));
+                            } else {
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+
+            if let Change::Existence(ExistenceChange::Added) = self.change {
+                new_diff.push((Some(ExistenceChange::Added), Code("}\n".to_string())));
+            } else {
+                assert!(matches!(self.change, Change::Modified));
+                new_diff.push((None, Code("}\n".to_string())));
+            }
+        }
 
         ViewableDiffs::new(vec![ViewableDiff {
-            old: Some(old_diff),
-            new: Some(new_diff),
+            old: if old_diff.is_empty() { None} else { Some(old_diff) },
+            new: if new_diff.is_empty() { None } else { Some(new_diff) },
         }])
     }
 }
@@ -494,6 +558,12 @@ impl View for ImplDiff {
 #[derive(Debug)]
 pub struct ImplItemsDiff {
     fns_diff: FunctionsDiff,
+}
+impl ImplItemsDiff {
+    #[allow(unused)]
+    pub fn len(&self) -> usize {
+        self.fns_diff.diffs().len()
+    }
 }
 impl ByteRange for ImplItemsDiff {
     fn old_ranges(&self) -> Vec<Range<usize>> {
