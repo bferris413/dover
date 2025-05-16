@@ -49,11 +49,16 @@ impl Treeish {
     }
 }
 
+pub struct RepoChangedFiles{
+    pub changed_files: Vec<ChangedFile>,
+    pub repo_workdir: PathBuf,
+}
+
 /// Get a list of changed files in the Git repository at `repo_path`.
 pub fn get_changed_files(
     repo_path: PathBuf,
     trees_to_diff: Option<Treeish>,
-) -> Result<Vec<ChangedFile>> {
+) -> Result<RepoChangedFiles> {
     let repo = Repository::discover(&repo_path).context("Failed to open Git repository")?;
     let Some(repo_path) = repo.workdir() else {
         bail!("Couldn't get workdir from {}", repo_path.display());
@@ -131,7 +136,12 @@ pub fn get_changed_files(
                     };
 
                     let change = ChangedFile {
-                        path: path.to_path_buf(),
+                        path: {
+                            let relative_path = repo_path.file_name().unwrap();
+                            let mut rel_path = PathBuf::from(relative_path);
+                            rel_path.push(path);
+                            rel_path
+                        },
                         change_type: Change::Added { contents },
                     };
                     changed_files.push(change);
@@ -167,7 +177,12 @@ pub fn get_changed_files(
                     assert_eq!(new_path, old_path);
                     let change = ChangedFile {
                         // assumes the above assert holds
-                        path: new_full_path,
+                        path: {
+                            let relative_path = repo_path.file_name().unwrap();
+                            let mut rel_path = PathBuf::from(relative_path);
+                            rel_path.push(new_path);
+                            rel_path
+                        },
                         change_type: Change::Modified {
                             before_contents,
                             after_contents,
@@ -189,7 +204,12 @@ pub fn get_changed_files(
                     let contents = get_blob_contents(&repo, &oid).unwrap();
 
                     let change = ChangedFile {
-                        path: path.to_path_buf(),
+                        path: {
+                            let relative_path = repo_path.file_name().unwrap();
+                            let mut rel_path = PathBuf::from(relative_path);
+                            rel_path.push(path);
+                            rel_path
+                        },
                         change_type: Change::Deleted { contents },
                     };
                     changed_files.push(change);
@@ -205,7 +225,8 @@ pub fn get_changed_files(
     )
     .context("Failed to iterate over diff")?;
 
-    Ok(changed_files)
+    let repo_files = RepoChangedFiles { changed_files, repo_workdir: repo_path.to_path_buf() };
+    Ok(repo_files)
 }
 
 /// Get the contents of a blob by its OID.

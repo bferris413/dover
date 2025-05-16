@@ -45,7 +45,10 @@ fn run_diff(command: Command) -> Result<()> {
         treeish
     });
 
-    let changes = dover::get_changed_files(PathBuf::from("."), trees)?
+    let repo_changes = dover::get_changed_files(PathBuf::from("."), trees)?;
+
+    let changes = repo_changes
+        .changed_files
         .into_iter()
         .filter(|c| c.path.extension().map_or(false, |ext| ext == "rs"));
 

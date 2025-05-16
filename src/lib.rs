@@ -583,6 +583,8 @@ impl Display for OverviewDiff {
             return Ok(());
         }
 
+        const MAX_HEADER_WIDTH: usize = 40;
+
         let fp1 = &self.file1.to_str().unwrap();
         let fp2 = &self.file2.to_str().unwrap();
         let header = underlined(&format!("{fp1} -> {fp2}"));
@@ -591,37 +593,37 @@ impl Display for OverviewDiff {
 
         if !self.uses_diff.is_empty() {
             let viewable_uses = self.uses_diff.as_viewable();
-            writeln!(&mut string_builder, "{}", underlined("Use"))?;
+            writeln!(&mut string_builder, "{}", underlined(&format!("Use{}", " ".repeat(MAX_HEADER_WIDTH - 3))))?;
             writeln!(&mut string_builder, "{viewable_uses}")?;
         }
 
         if !self.structs_diff.is_empty() {
             let viewable_structs = self.structs_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined("Structs"))?;
+            writeln!(&mut string_builder, "\n{}", underlined(&format!("Struct{}", " ".repeat(MAX_HEADER_WIDTH - 7))))?;
             writeln!(&mut string_builder, "{viewable_structs}")?;
         }
 
         if !self.enums_diff.is_empty() {
             let viewable_enums = self.enums_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined("Enums"))?;
+            writeln!(&mut string_builder, "\n{}", underlined(&format!("Enum{}", " ".repeat(MAX_HEADER_WIDTH - 5))))?;
             writeln!(&mut string_builder, "{viewable_enums}")?;
         }
 
         if !self.traits_diff.is_empty() {
             let viewable_traits = self.traits_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined("Traits"))?;
+            writeln!(&mut string_builder, "\n{}", underlined(&format!("Trait{}", " ".repeat(MAX_HEADER_WIDTH - 6))))?;
             writeln!(&mut string_builder, "{viewable_traits}",)?;
         }
 
         if !self.functions_diff.is_empty() {
             let viewable_funcs = self.functions_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined("Functions"))?;
+            writeln!(&mut string_builder, "\n{}", underlined(&format!("Function{}", " ".repeat(MAX_HEADER_WIDTH - 9))))?;
             writeln!(&mut string_builder, "{}", viewable_funcs)?;
         }
 
         if !self.impls_diff.is_empty() {
             let viewable_impls = self.impls_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined("Impls"))?;
+            writeln!(&mut string_builder, "\n{}", underlined(&format!("Impl{}", " ".repeat(MAX_HEADER_WIDTH - 5))))?;
             writeln!(&mut string_builder, "{viewable_impls}",)?;
         }
 
