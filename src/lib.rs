@@ -53,6 +53,10 @@ impl ViewableDiffs {
     pub fn append(&mut self, mut diffs: ViewableDiffs) {
         self.vds.append(&mut diffs.vds);
     }
+    pub fn appendln(&mut self, mut diffs: ViewableDiffs) {
+        self.vds.append(&mut diffs.vds);
+        self.vds.push(ViewableDiff { old: Some(vec![(None, Code("\n".to_string()))]), new: Some(vec![(None, Code("\n".to_string()))])});
+    }
     pub fn collapse(&mut self) {
         if self.vds.is_empty() {
             return;
@@ -102,7 +106,7 @@ impl Display for ViewableDiffs {
                 if let Some(ref old) = vd.old {
                     let all_strings: Vec<_> = old.iter().map(|(_, c)| c.0.clone()).collect();
                     let string = all_strings.join("");
-                    let local_max = string.lines().map(|l| l.len()).max().unwrap_or(0);
+                    let local_max = string.lines().map(|l| l.len() + 2).max().unwrap_or(2);
                     cur_max = cur_max.max(local_max);
                 }
             }
@@ -111,126 +115,131 @@ impl Display for ViewableDiffs {
 
         for vd in self.vds.iter() {
             let (mut old_section, mut new_section) = (Vec::new(), Vec::new());
-            match &vd.old {
-                Some(old) => {
-                    let mut output_lines = Vec::new();
-                    let mut line_of_spans = String::new();
-                    let mut plain_running_len = 0;
+            if let Some(old) = &vd.old {
+                let mut output_lines = Vec::new();
+                let mut line_of_spans = (false, String::new());
+                let mut line_of_spans_unformatted_len = 2;
 
-                    for (change, code) in old {
-                        if code.0.contains("\n") {
-                            let mut code_lines = code.0.lines().peekable();
-                            let next_span = code_lines.next().unwrap();
+                for (change, code) in old {
+                    if code.0.contains("\n") {
+                        let mut code_lines = code.0.lines().peekable();
+                        let next_span = code_lines.next().unwrap();
+                        match change {
+                            Some(ExistenceChange::Deleted) => {
+                                // println!("writing old del(1) {}", next.red());
+                                line_of_spans_unformatted_len += next_span.len();
+                                write!(line_of_spans.1, "{}", next_span.red())?;
+                                line_of_spans.0 = true;
+                            }
+                            Some(ExistenceChange::Added) => panic!(),
+                            None => {
+                                // println!("writing old nil(1) {}", next.normal());
+                                line_of_spans_unformatted_len += next_span.len();
+                                write!(line_of_spans.1, "{}", next_span.normal())?;
+                            }
+                        }
+                        // println!("pushing old(1) {running_string}");
+                        while line_of_spans_unformatted_len < old_col_max_width {
+                            line_of_spans.1.push(' ');
+                            line_of_spans_unformatted_len += 1;
+                        }
+                        output_lines.push(format!("{} {}", if line_of_spans.0 { "-".red() } else { " ".red() }, line_of_spans.1.clone()));
+                        line_of_spans.1.clear();
+                        line_of_spans.0 = false;
+
+                        line_of_spans_unformatted_len = 2;
+                        while let Some(line) = code_lines.next() {
                             match change {
                                 Some(ExistenceChange::Deleted) => {
-                                    // println!("writing old del(1) {}", next.red());
-                                    plain_running_len += next_span.len();
-                                    write!(line_of_spans, "{}", next_span.red())?;
+                                    if code_lines.peek().is_some()
+                                        || (code_lines.peek().is_none() && code.0.ends_with('\n'))
+                                    {
+                                        // println!("pushing old del(1) {}", line.red());
+                                        let gap = old_col_max_width.saturating_sub(line.len());
+                                        let full_line_span = format!("{} {line}{}", "-".red(), " ".repeat(gap));
+                                        output_lines.push(full_line_span.red().to_string());
+                                    } else {
+                                        // the last piece and not terminated with \n
+                                        // println!("writing old del (2){}", line.red());
+                                        line_of_spans_unformatted_len += line.len();
+                                        write!(line_of_spans.1, "{}", line.red())?;
+                                        line_of_spans.0 = true;
+                                    }
                                 }
                                 Some(ExistenceChange::Added) => panic!(),
                                 None => {
-                                    // println!("writing old nil(1) {}", next.normal());
-                                    plain_running_len += next_span.len();
-                                    write!(line_of_spans, "{}", next_span.normal())?;
-                                }
-                            }
-                            // println!("pushing old(1) {running_string}");
-                            while plain_running_len < old_col_max_width {
-                                line_of_spans.push(' ');
-                                plain_running_len += 1;
-                            }
-                            output_lines.push(line_of_spans.clone());
-                            line_of_spans.clear();
-                            plain_running_len = 0;
-                            while let Some(line) = code_lines.next() {
-                                match change {
-                                    Some(ExistenceChange::Deleted) => {
-                                        if code_lines.peek().is_some()
-                                            || (code_lines.peek().is_none() && code.0.ends_with('\n'))
-                                        {
-                                            // println!("pushing old del(1) {}", line.red());
-                                            let gap = old_col_max_width.saturating_sub(line.len());
-                                            let full_line_span = format!("{line}{}", " ".repeat(gap));
-                                            output_lines.push(full_line_span.red().to_string());
-                                        } else {
-                                            // the last piece and not terminated with \n
-                                            // println!("writing old del (2){}", line.red());
-                                            plain_running_len += line.len();
-                                            write!(line_of_spans, "{}", line.red())?;
-                                        }
-                                    }
-                                    Some(ExistenceChange::Added) => panic!(),
-                                    None => {
-                                        if code_lines.peek().is_some()
-                                            || (code_lines.peek().is_none() && code.0.ends_with('\n'))
-                                        {
-                                            // println!("pushing old nil(1) {}", line.normal());
-                                            let gap = old_col_max_width.saturating_sub(line.len());
-                                            let line = format!("{line}{}", " ".repeat(gap));
-                                            output_lines.push(line.normal().to_string())
-                                        } else {
-                                            // the last piece and not terminated with \n
-                                            // println!("writing old nil (2){}", line.normal());
-                                            plain_running_len += line.len();
-                                            write!(line_of_spans, "{}", line.normal())?;
-                                        }
+                                    if code_lines.peek().is_some()
+                                        || (code_lines.peek().is_none() && code.0.ends_with('\n'))
+                                    {
+                                        // println!("pushing old nil(1) {}", line.normal());
+                                        let gap = old_col_max_width.saturating_sub(line.len());
+                                        let line = format!("  {line}{}", " ".repeat(gap));
+                                        output_lines.push(line.normal().to_string())
+                                    } else {
+                                        // the last piece and not terminated with \n
+                                        // println!("writing old nil (2){}", line.normal());
+                                        line_of_spans_unformatted_len += line.len();
+                                        write!(line_of_spans.1, "{}", line.normal())?;
                                     }
                                 }
                             }
-                        } else {
-                            match change {
-                                Some(ExistenceChange::Deleted) => {
-                                    // println!("writing old del(3) {}", code.0.red());
-                                    plain_running_len += code.0.len();
-                                    write!(line_of_spans, "{}", code.0.red())?;
-                                }
-                                Some(ExistenceChange::Added) => panic!(),
-                                None => {
-                                    // println!("writing old nil(3){}", code.0.normal());
-                                    plain_running_len += code.0.len();
-                                    write!(line_of_spans, "{}", code.0.normal())?;
-                                }
+                        }
+                    } else {
+                        match change {
+                            Some(ExistenceChange::Deleted) => {
+                                // println!("writing old del(3) {}", code.0.red());
+                                line_of_spans_unformatted_len += code.0.len();
+                                write!(line_of_spans.1, "{}", code.0.red())?;
+                                line_of_spans.0 = true;
+                            }
+                            Some(ExistenceChange::Added) => panic!(),
+                            None => {
+                                // println!("writing old nil(3){}", code.0.normal());
+                                line_of_spans_unformatted_len += code.0.len();
+                                write!(line_of_spans.1, "{}", code.0.normal())?;
                             }
                         }
-                    }
-
-                    if !line_of_spans.is_empty() {
-                        while plain_running_len < old_col_max_width {
-                            line_of_spans.push(' ');
-                            plain_running_len += 1;
-                        }
-                        output_lines.push(line_of_spans);
-                    }
-
-                    for line in output_lines.into_iter() {
-                        old_section.push(line);
                     }
                 }
-                None => {}
+
+                if !line_of_spans.1.is_empty() {
+                    while line_of_spans_unformatted_len < old_col_max_width {
+                        line_of_spans.1.push(' ');
+                        line_of_spans_unformatted_len += 1;
+                    }
+                    output_lines.push(format!("{} {}", if line_of_spans.0 { "-".red() } else { " ".red() }, line_of_spans.1));
+                }
+
+                for line in output_lines.into_iter() {
+                    old_section.push(line);
+                }
             }
 
             match &vd.new {
                 Some(new) => {
                     let mut output_lines = Vec::new();
-                    let mut line_of_spans = String::new();
+                    let mut line_of_spans = (false, String::new());
                     for (change, code) in new {
                         if code.0.contains("\n") {
                             let mut code_lines = code.0.lines().peekable();
-                            let next = code_lines.next().unwrap();
+                            let next_span = code_lines.next().unwrap();
                             match change {
                                 Some(ExistenceChange::Added) => {
                                     // println!("writing new add(1){}", next.green());
-                                    write!(line_of_spans, "{}", next.green())?;
+                                    write!(line_of_spans.1, "{}", next_span.green())?;
+                                    line_of_spans.0 = true;
                                 }
                                 Some(ExistenceChange::Deleted) => panic!(),
                                 None => {
                                     // println!("writing new del(1){}", next.normal());
-                                    write!(line_of_spans, "{}", next.normal())?;
+                                    write!(line_of_spans.1, "{}", next_span.normal())?;
                                 }
                             }
                             // println!("pushing new(1) {running_string}");
-                            output_lines.push(line_of_spans.clone());
-                            line_of_spans.clear();
+                            output_lines.push(format!("{} {}", if line_of_spans.0 { "+".green() } else { " ".green() }, line_of_spans.1.clone()));
+                            line_of_spans.1.clear();
+                            line_of_spans.0 = false; 
+
                             while let Some(full_line_span) = code_lines.next() {
                                 match change {
                                     Some(ExistenceChange::Added) => {
@@ -238,11 +247,12 @@ impl Display for ViewableDiffs {
                                             || (code_lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
                                             // println!("pushing new add(2){}", line.green());
-                                            output_lines.push(full_line_span.green().to_string());
+                                            output_lines.push(format!("{} {}", "+".green(), full_line_span.green().to_string()));
                                         } else {
                                             // the last piece and not terminated with \n
                                             // println!("writing new add(2){}", line.green());
-                                            write!(line_of_spans, "{}", full_line_span.green())?;
+                                            write!(line_of_spans.1, "{}", full_line_span.green())?;
+                                            line_of_spans.0 = true;
                                         }
                                     }
                                     Some(ExistenceChange::Deleted) => panic!(),
@@ -255,7 +265,7 @@ impl Display for ViewableDiffs {
                                         } else {
                                             // the last piece and not terminated with \n
                                             // println!("writing new nil (2){}", line.normal());
-                                            write!(line_of_spans, "{}", full_line_span.normal())?;
+                                            write!(line_of_spans.1, "{}", full_line_span.normal())?;
                                         }
                                     }
                                 }
@@ -264,19 +274,20 @@ impl Display for ViewableDiffs {
                             match change {
                                 Some(ExistenceChange::Added) => {
                                     // println!("writing {}", code.0.green());
-                                    write!(line_of_spans, "{}", code.0.green())?;
+                                    write!(line_of_spans.1, "{}", code.0.green())?;
+                                    line_of_spans.0 = true;
                                 }
                                 Some(ExistenceChange::Deleted) => panic!(),
                                 None => {
                                     // println!("writing {}", code.0.normal());
-                                    write!(line_of_spans, "{}", code.0.normal())?;
+                                    write!(line_of_spans.1, "{}", code.0.normal())?;
                                 }
                             }
                         }
                     }
 
-                    if !line_of_spans.is_empty() {
-                        output_lines.push(line_of_spans);
+                    if !line_of_spans.1.is_empty() {
+                        output_lines.push(format!("{} {}", if line_of_spans.0 { "+".green() } else { " ".green() }, line_of_spans.1));
                     }
 
                     for line in output_lines.into_iter() {

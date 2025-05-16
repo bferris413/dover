@@ -9,8 +9,6 @@ use dover::{Diff, GitChange, Overview, Treeish};
 struct Cli {
     #[command(subcommand)]
     command: Command,
-    #[arg(long, default_value_t=true)]
-    fancy: bool
 }
 
 #[derive(Debug, Subcommand)]

@@ -297,7 +297,7 @@ impl View for FunctionDiff {
                     return ViewableDiffs::new(vec![ViewableDiff {
                         old: Some(vec![(
                             Some(ExistenceChange::Deleted),
-                            Code(format!("{old_func}\n")),
+                            Code(format!("{old_func}")),
                         )]),
                         new: None,
                     }]);
@@ -307,7 +307,7 @@ impl View for FunctionDiff {
                         old: None,
                         new: Some(vec![(
                             Some(ExistenceChange::Added),
-                            Code(format!("{new_func}\n")),
+                            Code(format!("{new_func}")),
                         )]),
                     }]);
                 }
@@ -606,7 +606,7 @@ impl View for FunctionsDiff {
 
         let mut viewables = ViewableDiffs::empty();
         for diff in ex_diffs {
-            viewables.append(diff.as_viewable());
+            viewables.appendln(diff.as_viewable());
         }
 
         // add/delete diffs should be side-by-side
@@ -618,7 +618,7 @@ impl View for FunctionsDiff {
             .filter(|diff| matches!(diff.change, Change::Modified));
 
         for diff in mod_diffs {
-            viewables.append(diff.as_viewable());
+            viewables.appendln(diff.as_viewable());
         }
 
         viewables
