@@ -4,14 +4,16 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use dover::{Diff, GitChange, Overview, Treeish};
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(author, version, about = "Diff OVERview")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
+    #[arg(long, default_value_t=true)]
+    fancy: bool
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 enum Command {
     Diff {
         commit1: Option<String>,

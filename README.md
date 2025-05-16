@@ -1,2 +1,2 @@
 # dover
-Diff overview
+`dover` (**D**iff **OVER**view) is a CLI tool for summarizing `git` diffs of Rust code. `dover` diffs provide a semantic, high-level overview of the changes tracked by `git`. The intention isn't to replace `git`, but to supplement it.

@@ -297,7 +297,7 @@ impl View for FunctionDiff {
                     return ViewableDiffs::new(vec![ViewableDiff {
                         old: Some(vec![(
                             Some(ExistenceChange::Deleted),
-                            Code(format!("{old_func}")),
+                            Code(format!("{old_func}\n")),
                         )]),
                         new: None,
                     }]);
@@ -307,7 +307,7 @@ impl View for FunctionDiff {
                         old: None,
                         new: Some(vec![(
                             Some(ExistenceChange::Added),
-                            Code(format!("{new_func}")),
+                            Code(format!("{new_func}\n")),
                         )]),
                     }]);
                 }

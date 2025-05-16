@@ -92,7 +92,7 @@ impl Display for ViewableDiffs {
         //  None of this is optimized for readability or efficiency. It's barely working.  |
         //                                                                                 |
         //   Edit: A recent bug reminded me how terrible this section is to work in. It    |
-        //         probably needs a complete rewrite.                                      |
+        //         needs a complete rewrite.                                               |
         // ---------------------------------------------------------------------------------
         let (mut old_col, mut new_col) = (Vec::new(), Vec::new());
 
@@ -113,65 +113,66 @@ impl Display for ViewableDiffs {
             let (mut old_section, mut new_section) = (Vec::new(), Vec::new());
             match &vd.old {
                 Some(old) => {
-                    let mut colored_string = Vec::new();
-                    let mut running_string = String::new();
+                    let mut output_lines = Vec::new();
+                    let mut line_of_spans = String::new();
                     let mut plain_running_len = 0;
+
                     for (change, code) in old {
                         if code.0.contains("\n") {
-                            let mut lines = code.0.lines().peekable();
-                            let next = lines.next().unwrap();
+                            let mut code_lines = code.0.lines().peekable();
+                            let next_span = code_lines.next().unwrap();
                             match change {
                                 Some(ExistenceChange::Deleted) => {
                                     // println!("writing old del(1) {}", next.red());
-                                    plain_running_len += next.len();
-                                    write!(running_string, "{}", next.red())?;
+                                    plain_running_len += next_span.len();
+                                    write!(line_of_spans, "{}", next_span.red())?;
                                 }
                                 Some(ExistenceChange::Added) => panic!(),
                                 None => {
                                     // println!("writing old nil(1) {}", next.normal());
-                                    plain_running_len += next.len();
-                                    write!(running_string, "{}", next.normal())?;
+                                    plain_running_len += next_span.len();
+                                    write!(line_of_spans, "{}", next_span.normal())?;
                                 }
                             }
                             // println!("pushing old(1) {running_string}");
                             while plain_running_len < old_col_max_width {
-                                running_string.push(' ');
+                                line_of_spans.push(' ');
                                 plain_running_len += 1;
                             }
-                            colored_string.push(running_string.clone());
-                            running_string.clear();
+                            output_lines.push(line_of_spans.clone());
+                            line_of_spans.clear();
                             plain_running_len = 0;
-                            while let Some(line) = lines.next() {
+                            while let Some(line) = code_lines.next() {
                                 match change {
                                     Some(ExistenceChange::Deleted) => {
-                                        if lines.peek().is_some()
-                                            || (lines.peek().is_none() && code.0.ends_with('\n'))
+                                        if code_lines.peek().is_some()
+                                            || (code_lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
                                             // println!("pushing old del(1) {}", line.red());
                                             let gap = old_col_max_width.saturating_sub(line.len());
-                                            let line = format!("{line}{}", " ".repeat(gap));
-                                            colored_string.push(line.red().to_string());
+                                            let full_line_span = format!("{line}{}", " ".repeat(gap));
+                                            output_lines.push(full_line_span.red().to_string());
                                         } else {
                                             // the last piece and not terminated with \n
                                             // println!("writing old del (2){}", line.red());
                                             plain_running_len += line.len();
-                                            write!(running_string, "{}", line.red())?;
+                                            write!(line_of_spans, "{}", line.red())?;
                                         }
                                     }
                                     Some(ExistenceChange::Added) => panic!(),
                                     None => {
-                                        if lines.peek().is_some()
-                                            || (lines.peek().is_none() && code.0.ends_with('\n'))
+                                        if code_lines.peek().is_some()
+                                            || (code_lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
                                             // println!("pushing old nil(1) {}", line.normal());
                                             let gap = old_col_max_width.saturating_sub(line.len());
                                             let line = format!("{line}{}", " ".repeat(gap));
-                                            colored_string.push(line.normal().to_string())
+                                            output_lines.push(line.normal().to_string())
                                         } else {
                                             // the last piece and not terminated with \n
                                             // println!("writing old nil (2){}", line.normal());
                                             plain_running_len += line.len();
-                                            write!(running_string, "{}", line.normal())?;
+                                            write!(line_of_spans, "{}", line.normal())?;
                                         }
                                     }
                                 }
@@ -181,27 +182,27 @@ impl Display for ViewableDiffs {
                                 Some(ExistenceChange::Deleted) => {
                                     // println!("writing old del(3) {}", code.0.red());
                                     plain_running_len += code.0.len();
-                                    write!(running_string, "{}", code.0.red())?;
+                                    write!(line_of_spans, "{}", code.0.red())?;
                                 }
                                 Some(ExistenceChange::Added) => panic!(),
                                 None => {
                                     // println!("writing old nil(3){}", code.0.normal());
                                     plain_running_len += code.0.len();
-                                    write!(running_string, "{}", code.0.normal())?;
+                                    write!(line_of_spans, "{}", code.0.normal())?;
                                 }
                             }
                         }
                     }
 
-                    if !running_string.is_empty() {
+                    if !line_of_spans.is_empty() {
                         while plain_running_len < old_col_max_width {
-                            running_string.push(' ');
+                            line_of_spans.push(' ');
                             plain_running_len += 1;
                         }
-                        colored_string.push(running_string);
+                        output_lines.push(line_of_spans);
                     }
 
-                    for line in colored_string.into_iter() {
+                    for line in output_lines.into_iter() {
                         old_section.push(line);
                     }
                 }
@@ -210,51 +211,51 @@ impl Display for ViewableDiffs {
 
             match &vd.new {
                 Some(new) => {
-                    let mut colored_string = Vec::new();
-                    let mut running_string = String::new();
+                    let mut output_lines = Vec::new();
+                    let mut line_of_spans = String::new();
                     for (change, code) in new {
                         if code.0.contains("\n") {
-                            let mut lines = code.0.lines().peekable();
-                            let next = lines.next().unwrap();
+                            let mut code_lines = code.0.lines().peekable();
+                            let next = code_lines.next().unwrap();
                             match change {
                                 Some(ExistenceChange::Added) => {
                                     // println!("writing new add(1){}", next.green());
-                                    write!(running_string, "{}", next.green())?;
+                                    write!(line_of_spans, "{}", next.green())?;
                                 }
                                 Some(ExistenceChange::Deleted) => panic!(),
                                 None => {
                                     // println!("writing new del(1){}", next.normal());
-                                    write!(running_string, "{}", next.normal())?;
+                                    write!(line_of_spans, "{}", next.normal())?;
                                 }
                             }
                             // println!("pushing new(1) {running_string}");
-                            colored_string.push(running_string.clone());
-                            running_string.clear();
-                            while let Some(line) = lines.next() {
+                            output_lines.push(line_of_spans.clone());
+                            line_of_spans.clear();
+                            while let Some(full_line_span) = code_lines.next() {
                                 match change {
                                     Some(ExistenceChange::Added) => {
-                                        if lines.peek().is_some()
-                                            || (lines.peek().is_none() && code.0.ends_with('\n'))
+                                        if code_lines.peek().is_some()
+                                            || (code_lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
                                             // println!("pushing new add(2){}", line.green());
-                                            colored_string.push(line.green().to_string());
+                                            output_lines.push(full_line_span.green().to_string());
                                         } else {
                                             // the last piece and not terminated with \n
                                             // println!("writing new add(2){}", line.green());
-                                            write!(running_string, "{}", line.green())?;
+                                            write!(line_of_spans, "{}", full_line_span.green())?;
                                         }
                                     }
                                     Some(ExistenceChange::Deleted) => panic!(),
                                     None => {
-                                        if lines.peek().is_some()
-                                            || (lines.peek().is_none() && code.0.ends_with('\n'))
+                                        if code_lines.peek().is_some()
+                                            || (code_lines.peek().is_none() && code.0.ends_with('\n'))
                                         {
                                             // println!("pushing {}", line.normal());
-                                            colored_string.push(line.normal().to_string())
+                                            output_lines.push(full_line_span.normal().to_string())
                                         } else {
                                             // the last piece and not terminated with \n
                                             // println!("writing new nil (2){}", line.normal());
-                                            write!(running_string, "{}", line.normal())?;
+                                            write!(line_of_spans, "{}", full_line_span.normal())?;
                                         }
                                     }
                                 }
@@ -263,22 +264,22 @@ impl Display for ViewableDiffs {
                             match change {
                                 Some(ExistenceChange::Added) => {
                                     // println!("writing {}", code.0.green());
-                                    write!(running_string, "{}", code.0.green())?;
+                                    write!(line_of_spans, "{}", code.0.green())?;
                                 }
                                 Some(ExistenceChange::Deleted) => panic!(),
                                 None => {
                                     // println!("writing {}", code.0.normal());
-                                    write!(running_string, "{}", code.0.normal())?;
+                                    write!(line_of_spans, "{}", code.0.normal())?;
                                 }
                             }
                         }
                     }
 
-                    if !running_string.is_empty() {
-                        colored_string.push(running_string);
+                    if !line_of_spans.is_empty() {
+                        output_lines.push(line_of_spans);
                     }
 
-                    for line in colored_string.into_iter() {
+                    for line in output_lines.into_iter() {
                         new_section.push(line);
                     }
                 }
@@ -310,7 +311,6 @@ impl Display for ViewableDiffs {
 
         for (left, right) in left_right {
             let format_str = format!("{left}      {right}\n");
-            // let format_str = dbg!(format!("{left}      {right}\n"));
             formatted_output.push_str(&format_str);
         }
 
