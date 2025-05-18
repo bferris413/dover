@@ -186,7 +186,7 @@ impl View for EnumsDiff {
 
         let mut viewables = ViewableDiffs::empty();
         for ex_diff in ex_diffs {
-            viewables.appendln(ex_diff.as_viewable());
+            viewables.append(ex_diff.as_viewable());
         }
 
         // add/delete diffs should be side-by-side
@@ -198,7 +198,7 @@ impl View for EnumsDiff {
             .filter(|diff| matches!(diff.change, Change::Modified));
 
         for mod_diff in mod_diffs {
-            viewables.appendln(mod_diff.as_viewable());
+            viewables.append(mod_diff.as_viewable());
         }
 
         viewables
@@ -298,12 +298,17 @@ impl View for EnumDiff {
                 }
             }
         }
-        
+
         if let Some(vdiffs) = &self.variants_diff {
             let mut i = decl_end;
 
             while i < old_range.end {
-                let maybe_item_diff = vdiffs.diffs().iter().find(|d| d.old().as_ref().map(|old_variant| old_variant.original().span().byte_range().contains(&i)).unwrap_or(false));
+                let maybe_item_diff = vdiffs.diffs().iter().find(|d| {
+                    d.old()
+                        .as_ref()
+                        .map(|old_variant| old_variant.original().span().byte_range().contains(&i))
+                        .unwrap_or(false)
+                });
                 match maybe_item_diff {
                     Some(variant_diff) => {
                         let viewable = variant_diff.as_viewable();
@@ -313,7 +318,14 @@ impl View for EnumDiff {
                             }
                         }
 
-                        i = variant_diff.old().as_ref().unwrap().original().span().byte_range().end;
+                        i = variant_diff
+                            .old()
+                            .as_ref()
+                            .unwrap()
+                            .original()
+                            .span()
+                            .byte_range()
+                            .end;
                     }
                     None => {
                         if old_src[i].is_ascii_whitespace() {
@@ -323,7 +335,8 @@ impl View for EnumDiff {
                             }
 
                             let substring = old_src[start..i].to_vec();
-                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                            let code =
+                                Code(String::from_utf8(substring).expect("Off a code boundary"));
                             old_diff.push((None, code));
                         } else {
                             i += 1;
@@ -387,7 +400,12 @@ impl View for EnumDiff {
         if let Some(vds) = &self.variants_diff {
             let mut i = decl_end;
             while i < new_range.end {
-                let maybe_item_diff = vds.diffs().iter().find(|d| d.new().as_ref().map(|new_func| new_func.original().span().byte_range().contains(&i)).unwrap_or(false));
+                let maybe_item_diff = vds.diffs().iter().find(|d| {
+                    d.new()
+                        .as_ref()
+                        .map(|new_func| new_func.original().span().byte_range().contains(&i))
+                        .unwrap_or(false)
+                });
                 match maybe_item_diff {
                     Some(id) => {
                         let viewable = id.as_viewable();
@@ -397,7 +415,14 @@ impl View for EnumDiff {
                             }
                         }
 
-                        i = id.new().as_ref().unwrap().original().span().byte_range().end;
+                        i = id
+                            .new()
+                            .as_ref()
+                            .unwrap()
+                            .original()
+                            .span()
+                            .byte_range()
+                            .end;
                     }
                     None => {
                         if new_src[i].is_ascii_whitespace() {
@@ -407,7 +432,8 @@ impl View for EnumDiff {
                             }
 
                             let substring = new_src[start..i].to_vec();
-                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                            let code =
+                                Code(String::from_utf8(substring).expect("Off a code boundary"));
                             new_diff.push((None, code));
                         } else {
                             i += 1;

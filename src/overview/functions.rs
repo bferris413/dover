@@ -606,7 +606,7 @@ impl View for FunctionsDiff {
 
         let mut viewables = ViewableDiffs::empty();
         for diff in ex_diffs {
-            viewables.appendln(diff.as_viewable());
+            viewables.append(diff.as_viewable());
         }
 
         // add/delete diffs should be side-by-side
@@ -618,7 +618,7 @@ impl View for FunctionsDiff {
             .filter(|diff| matches!(diff.change, Change::Modified));
 
         for diff in mod_diffs {
-            viewables.appendln(diff.as_viewable());
+            viewables.append(diff.as_viewable());
         }
 
         viewables

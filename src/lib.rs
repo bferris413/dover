@@ -53,10 +53,6 @@ impl ViewableDiffs {
     pub fn append(&mut self, mut diffs: ViewableDiffs) {
         self.vds.append(&mut diffs.vds);
     }
-    pub fn appendln(&mut self, mut diffs: ViewableDiffs) {
-        self.vds.append(&mut diffs.vds);
-        self.vds.push(ViewableDiff { old: Some(vec![(None, Code("\n".to_string()))]), new: Some(vec![(None, Code("\n".to_string()))])});
-    }
     pub fn collapse(&mut self) {
         if self.vds.is_empty() {
             return;
@@ -143,7 +139,15 @@ impl Display for ViewableDiffs {
                             line_of_spans.1.push(' ');
                             line_of_spans_unformatted_len += 1;
                         }
-                        output_lines.push(format!("{} {}", if line_of_spans.0 { "-".red() } else { " ".red() }, line_of_spans.1.clone()));
+                        output_lines.push(format!(
+                            "{} {}",
+                            if line_of_spans.0 {
+                                "-".red()
+                            } else {
+                                " ".red()
+                            },
+                            line_of_spans.1.clone()
+                        ));
                         line_of_spans.1.clear();
                         line_of_spans.0 = false;
 
@@ -156,7 +160,8 @@ impl Display for ViewableDiffs {
                                     {
                                         // println!("pushing old del(1) {}", line.red());
                                         let gap = old_col_max_width.saturating_sub(line.len());
-                                        let full_line_span = format!("{} {line}{}", "-".red(), " ".repeat(gap));
+                                        let full_line_span =
+                                            format!("{} {line}{}", "-".red(), " ".repeat(gap));
                                         output_lines.push(full_line_span.red().to_string());
                                     } else {
                                         // the last piece and not terminated with \n
@@ -207,7 +212,15 @@ impl Display for ViewableDiffs {
                         line_of_spans.1.push(' ');
                         line_of_spans_unformatted_len += 1;
                     }
-                    output_lines.push(format!("{} {}", if line_of_spans.0 { "-".red() } else { " ".red() }, line_of_spans.1));
+                    output_lines.push(format!(
+                        "{} {}",
+                        if line_of_spans.0 {
+                            "-".red()
+                        } else {
+                            " ".red()
+                        },
+                        line_of_spans.1
+                    ));
                 }
 
                 for line in output_lines.into_iter() {
@@ -236,18 +249,31 @@ impl Display for ViewableDiffs {
                                 }
                             }
                             // println!("pushing new(1) {running_string}");
-                            output_lines.push(format!("{} {}", if line_of_spans.0 { "+".green() } else { " ".green() }, line_of_spans.1.clone()));
+                            output_lines.push(format!(
+                                "{} {}",
+                                if line_of_spans.0 {
+                                    "+".green()
+                                } else {
+                                    " ".green()
+                                },
+                                line_of_spans.1.clone()
+                            ));
                             line_of_spans.1.clear();
-                            line_of_spans.0 = false; 
+                            line_of_spans.0 = false;
 
                             while let Some(full_line_span) = code_lines.next() {
                                 match change {
                                     Some(ExistenceChange::Added) => {
                                         if code_lines.peek().is_some()
-                                            || (code_lines.peek().is_none() && code.0.ends_with('\n'))
+                                            || (code_lines.peek().is_none()
+                                                && code.0.ends_with('\n'))
                                         {
                                             // println!("pushing new add(2){}", line.green());
-                                            output_lines.push(format!("{} {}", "+".green(), full_line_span.green().to_string()));
+                                            output_lines.push(format!(
+                                                "{} {}",
+                                                "+".green(),
+                                                full_line_span.green().to_string()
+                                            ));
                                         } else {
                                             // the last piece and not terminated with \n
                                             // println!("writing new add(2){}", line.green());
@@ -258,7 +284,8 @@ impl Display for ViewableDiffs {
                                     Some(ExistenceChange::Deleted) => panic!(),
                                     None => {
                                         if code_lines.peek().is_some()
-                                            || (code_lines.peek().is_none() && code.0.ends_with('\n'))
+                                            || (code_lines.peek().is_none()
+                                                && code.0.ends_with('\n'))
                                         {
                                             // println!("pushing {}", line.normal());
                                             output_lines.push(full_line_span.normal().to_string())
@@ -287,7 +314,15 @@ impl Display for ViewableDiffs {
                     }
 
                     if !line_of_spans.1.is_empty() {
-                        output_lines.push(format!("{} {}", if line_of_spans.0 { "+".green() } else { " ".green() }, line_of_spans.1));
+                        output_lines.push(format!(
+                            "{} {}",
+                            if line_of_spans.0 {
+                                "+".green()
+                            } else {
+                                " ".green()
+                            },
+                            line_of_spans.1
+                        ));
                     }
 
                     for line in output_lines.into_iter() {
@@ -593,37 +628,61 @@ impl Display for OverviewDiff {
 
         if !self.uses_diff.is_empty() {
             let viewable_uses = self.uses_diff.as_viewable();
-            writeln!(&mut string_builder, "{}", underlined(&format!("Use{}", " ".repeat(MAX_HEADER_WIDTH - 3))))?;
+            writeln!(
+                &mut string_builder,
+                "{}",
+                underlined(&format!("Use{}", " ".repeat(MAX_HEADER_WIDTH - 3)))
+            )?;
             writeln!(&mut string_builder, "{viewable_uses}")?;
         }
 
         if !self.structs_diff.is_empty() {
             let viewable_structs = self.structs_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined(&format!("Struct{}", " ".repeat(MAX_HEADER_WIDTH - 7))))?;
+            writeln!(
+                &mut string_builder,
+                "\n{}",
+                underlined(&format!("Struct{}", " ".repeat(MAX_HEADER_WIDTH - 7)))
+            )?;
             writeln!(&mut string_builder, "{viewable_structs}")?;
         }
 
         if !self.enums_diff.is_empty() {
             let viewable_enums = self.enums_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined(&format!("Enum{}", " ".repeat(MAX_HEADER_WIDTH - 5))))?;
+            writeln!(
+                &mut string_builder,
+                "\n{}",
+                underlined(&format!("Enum{}", " ".repeat(MAX_HEADER_WIDTH - 5)))
+            )?;
             writeln!(&mut string_builder, "{viewable_enums}")?;
         }
 
         if !self.traits_diff.is_empty() {
             let viewable_traits = self.traits_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined(&format!("Trait{}", " ".repeat(MAX_HEADER_WIDTH - 6))))?;
+            writeln!(
+                &mut string_builder,
+                "\n{}",
+                underlined(&format!("Trait{}", " ".repeat(MAX_HEADER_WIDTH - 6)))
+            )?;
             writeln!(&mut string_builder, "{viewable_traits}",)?;
         }
 
         if !self.functions_diff.is_empty() {
             let viewable_funcs = self.functions_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined(&format!("Function{}", " ".repeat(MAX_HEADER_WIDTH - 9))))?;
+            writeln!(
+                &mut string_builder,
+                "\n{}",
+                underlined(&format!("Function{}", " ".repeat(MAX_HEADER_WIDTH - 9)))
+            )?;
             writeln!(&mut string_builder, "{}", viewable_funcs)?;
         }
 
         if !self.impls_diff.is_empty() {
             let viewable_impls = self.impls_diff.as_viewable();
-            writeln!(&mut string_builder, "\n{}", underlined(&format!("Impl{}", " ".repeat(MAX_HEADER_WIDTH - 5))))?;
+            writeln!(
+                &mut string_builder,
+                "\n{}",
+                underlined(&format!("Impl{}", " ".repeat(MAX_HEADER_WIDTH - 5)))
+            )?;
             writeln!(&mut string_builder, "{viewable_impls}",)?;
         }
 

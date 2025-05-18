@@ -186,7 +186,7 @@ impl View for StructsDiff {
 
         let mut viewables = ViewableDiffs::empty();
         for ex_diff in ex_diffs {
-            viewables.appendln(ex_diff.as_viewable());
+            viewables.append(ex_diff.as_viewable());
         }
 
         // add/delete diffs should be side-by-side
@@ -198,7 +198,7 @@ impl View for StructsDiff {
             .filter(|diff| matches!(diff.change, Change::Modified));
 
         for mod_diff in mod_diffs {
-            viewables.appendln(mod_diff.as_viewable());
+            viewables.append(mod_diff.as_viewable());
         }
 
         viewables
@@ -256,8 +256,12 @@ impl View for StructDiff {
         let old_range = old.span().byte_range();
         let decl_start = old_range.start;
         let decl_end = match &old.fields {
-            syn::Fields::Named(fields_named) => fields_named.brace_token.span.span().byte_range().start + 1,
-            syn::Fields::Unnamed(fields_unnamed) => fields_unnamed.paren_token.span.span().byte_range().start + 1,
+            syn::Fields::Named(fields_named) => {
+                fields_named.brace_token.span.span().byte_range().start + 1
+            }
+            syn::Fields::Unnamed(fields_unnamed) => {
+                fields_unnamed.paren_token.span.span().byte_range().start + 1
+            }
             syn::Fields::Unit => old.span().byte_range().end,
         };
 
@@ -302,12 +306,17 @@ impl View for StructDiff {
                 }
             }
         }
-        
+
         if let Some(field_diffs) = &self.fields_diff {
             let mut i = decl_end;
 
             while i < old_range.end {
-                let maybe_item_diff = field_diffs.diffs().iter().find(|d| d.old().as_ref().map(|old_variant| old_variant.span().byte_range().contains(&i)).unwrap_or(false));
+                let maybe_item_diff = field_diffs.diffs().iter().find(|d| {
+                    d.old()
+                        .as_ref()
+                        .map(|old_variant| old_variant.span().byte_range().contains(&i))
+                        .unwrap_or(false)
+                });
                 match maybe_item_diff {
                     Some(id) => {
                         let viewable = id.as_viewable();
@@ -327,7 +336,8 @@ impl View for StructDiff {
                             }
 
                             let substring = old_src[start..i].to_vec();
-                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                            let code =
+                                Code(String::from_utf8(substring).expect("Off a code boundary"));
                             old_diff.push((None, code));
                         } else {
                             i += 1;
@@ -349,8 +359,12 @@ impl View for StructDiff {
         let new_range = new.span().byte_range();
         let decl_start = new_range.start;
         let decl_end = match &new.fields {
-            syn::Fields::Named(fields_named) => fields_named.brace_token.span.span().byte_range().start + 1,
-            syn::Fields::Unnamed(fields_unnamed) => fields_unnamed.paren_token.span.span().byte_range().start + 1,
+            syn::Fields::Named(fields_named) => {
+                fields_named.brace_token.span.span().byte_range().start + 1
+            }
+            syn::Fields::Unnamed(fields_unnamed) => {
+                fields_unnamed.paren_token.span.span().byte_range().start + 1
+            }
             syn::Fields::Unit => new.span().byte_range().end,
         };
 
@@ -399,7 +413,12 @@ impl View for StructDiff {
         if let Some(fds) = &self.fields_diff {
             let mut i = decl_end;
             while i < new_range.end {
-                let maybe_item_diff = fds.diffs().iter().find(|d| d.new().as_ref().map(|new_func| new_func.span().byte_range().contains(&i)).unwrap_or(false));
+                let maybe_item_diff = fds.diffs().iter().find(|d| {
+                    d.new()
+                        .as_ref()
+                        .map(|new_func| new_func.span().byte_range().contains(&i))
+                        .unwrap_or(false)
+                });
                 match maybe_item_diff {
                     Some(id) => {
                         let viewable = id.as_viewable();
@@ -419,7 +438,8 @@ impl View for StructDiff {
                             }
 
                             let substring = new_src[start..i].to_vec();
-                            let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                            let code =
+                                Code(String::from_utf8(substring).expect("Off a code boundary"));
                             new_diff.push((None, code));
                         } else {
                             i += 1;

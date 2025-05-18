@@ -81,7 +81,7 @@ impl Diff for Impls {
                 None => {
                     // impl was deleted
                     let unsafe_diff: Option<UnsafeDiff> = None;
-                    let generics_diff:  Option<GenericsDiff> = None;
+                    let generics_diff: Option<GenericsDiff> = None;
                     let items_diff = {
                         // TODO: only supports functions
                         let self_fn_items: Vec<_> = impl_
@@ -95,7 +95,8 @@ impl Diff for Impls {
 
                         let other_items_fns = Functions::new_impl(vec![], impl_.source.clone());
                         // TODO: using impl_.source here because I don't have source here, fix this.
-                        let self_items_fns = Functions::new_impl(self_fn_items, impl_.source.clone());
+                        let self_items_fns =
+                            Functions::new_impl(self_fn_items, impl_.source.clone());
                         let fns_diff = self_items_fns.diff_with(&other_items_fns);
 
                         if fns_diff.is_empty() {
@@ -132,10 +133,14 @@ impl Diff for Impls {
         // file2
         // Everything here is either new or already accounted for
         for impl_ in &other.impls {
-            if let None = self.impls.iter().find(|i| i.self_ty == impl_.self_ty && i.trait_ == impl_.trait_) {
+            if let None = self
+                .impls
+                .iter()
+                .find(|i| i.self_ty == impl_.self_ty && i.trait_ == impl_.trait_)
+            {
                 // impl was added
                 let unsafe_diff: Option<UnsafeDiff> = None;
-                let generics_diff:  Option<GenericsDiff> = None;
+                let generics_diff: Option<GenericsDiff> = None;
                 let items_diff = {
                     // TODO: only supports functions
                     let self_fn_items: Vec<_> = impl_
@@ -316,7 +321,7 @@ impl View for ImplsDiff {
 
         let mut viewables = ViewableDiffs::empty();
         for ex_diff in ex_diffs {
-            viewables.appendln(ex_diff.as_viewable());
+            viewables.append(ex_diff.as_viewable());
         }
 
         // add/delete diffs should be side-by-side
@@ -328,9 +333,9 @@ impl View for ImplsDiff {
             .filter(|diff| matches!(diff.change, Change::Modified));
 
         for mod_diff in mod_diffs {
-            viewables.appendln(mod_diff.as_viewable());
+            viewables.append(mod_diff.as_viewable());
         }
-        
+
         viewables
     }
 }
@@ -407,12 +412,17 @@ impl View for ImplDiff {
                     }
                 }
             }
-            
+
             if let Some(ids) = &self.items_diff {
                 let mut i = decl_end;
 
                 while i < old_range.end {
-                    let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.old().as_ref().map(|old_func| old_func.original().span().byte_range().contains(&i)).unwrap_or(false));
+                    let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| {
+                        d.old()
+                            .as_ref()
+                            .map(|old_func| old_func.original().span().byte_range().contains(&i))
+                            .unwrap_or(false)
+                    });
                     match maybe_item_diff {
                         Some(id) => {
                             let viewable = id.as_viewable();
@@ -422,7 +432,14 @@ impl View for ImplDiff {
                                 }
                             }
 
-                            i = id.old().as_ref().unwrap().original().span().byte_range().end;
+                            i = id
+                                .old()
+                                .as_ref()
+                                .unwrap()
+                                .original()
+                                .span()
+                                .byte_range()
+                                .end;
                         }
                         None => {
                             if old_src[i].is_ascii_whitespace() {
@@ -432,7 +449,9 @@ impl View for ImplDiff {
                                 }
 
                                 let substring = old_src[start..i].to_vec();
-                                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                                let code = Code(
+                                    String::from_utf8(substring).expect("Off a code boundary"),
+                                );
                                 old_diff.push((None, code));
                             } else {
                                 i += 1;
@@ -441,7 +460,6 @@ impl View for ImplDiff {
                     }
                 }
             }
-
 
             if let Change::Existence(ExistenceChange::Deleted) = self.change {
                 old_diff.push((Some(ExistenceChange::Deleted), Code("}\n".to_string())));
@@ -509,7 +527,12 @@ impl View for ImplDiff {
             if let Some(ids) = &self.items_diff {
                 let mut i = decl_end;
                 while i < new_range.end {
-                    let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| d.new().as_ref().map(|new_func| new_func.original().span().byte_range().contains(&i)).unwrap_or(false));
+                    let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| {
+                        d.new()
+                            .as_ref()
+                            .map(|new_func| new_func.original().span().byte_range().contains(&i))
+                            .unwrap_or(false)
+                    });
                     match maybe_item_diff {
                         Some(id) => {
                             let viewable = id.as_viewable();
@@ -519,7 +542,14 @@ impl View for ImplDiff {
                                 }
                             }
 
-                            i = id.new().as_ref().unwrap().original().span().byte_range().end;
+                            i = id
+                                .new()
+                                .as_ref()
+                                .unwrap()
+                                .original()
+                                .span()
+                                .byte_range()
+                                .end;
                         }
                         None => {
                             if new_src[i].is_ascii_whitespace() {
@@ -529,7 +559,9 @@ impl View for ImplDiff {
                                 }
 
                                 let substring = new_src[start..i].to_vec();
-                                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                                let code = Code(
+                                    String::from_utf8(substring).expect("Off a code boundary"),
+                                );
                                 new_diff.push((None, code));
                             } else {
                                 i += 1;
@@ -538,7 +570,6 @@ impl View for ImplDiff {
                     }
                 }
             }
-
 
             if let Change::Existence(ExistenceChange::Added) = self.change {
                 new_diff.push((Some(ExistenceChange::Added), Code("}\n".to_string())));
@@ -549,8 +580,16 @@ impl View for ImplDiff {
         }
 
         ViewableDiffs::new(vec![ViewableDiff {
-            old: if old_diff.is_empty() { None} else { Some(old_diff) },
-            new: if new_diff.is_empty() { None } else { Some(new_diff) },
+            old: if old_diff.is_empty() {
+                None
+            } else {
+                Some(old_diff)
+            },
+            new: if new_diff.is_empty() {
+                None
+            } else {
+                Some(new_diff)
+            },
         }])
     }
 }
