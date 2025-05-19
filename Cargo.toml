@@ -1,11 +1,9 @@
 [package]
 name = "dover"
+authors = ["benjamin"]
 version = "0.1.0"
 edition = "2024"
-
-[[bin]]
-name = "dover"
-path = "src/main.rs"
+include = ["src/**/*.rs", "Cargo.toml"]
 description = "A CLI tool for summarizing git diffs of Rust code"
 license = "MIT OR APACHE-2.0"
 repository = "https://github.com/bferris413/dover"
@@ -13,6 +11,10 @@ homepage = "https://github.com/bferris413/dover"
 readme = "README.md"
 keywords = ["cli", "git", "diff", "tool"]
 categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "dover"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.95"
