@@ -5,8 +5,13 @@ dover (**d**iff **over**view) is a CLI tool for summarizing git diffs of Rust co
 While usable, this project is very prototype-y, both in terms of output format and implementation. Updates are made on a semi-dialy basis, but it's still in the early stages. See the roadmap for planned features and changes.
 
 # Installation
-## Build from source
-You'll need a recent version of Rust, which you can get [here](https://www.rust-lang.org/learn/get-started).
+If you're building from source or using cargo, lou'll need a recent version of Rust, which you can get [here](https://www.rust-lang.org/learn/get-started).
+## Using cargo
+```sh
+cargo install dover
+```
+
+## Building from source
 
 1. Clone the repository
 ```sh
