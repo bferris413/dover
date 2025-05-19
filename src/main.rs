@@ -13,17 +13,17 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Diff two commits (emulates `git diff [SHA-1 [SHA-1]]`)
     Diff {
+        /// a test thing
         commit1: Option<String>,
         commit2: Option<String>,
     },
-    Files {
-        file1: PathBuf,
-        file2: PathBuf,
-    },
-    Overview {
-        files: Vec<PathBuf>,
-    },
+    /// Diff two files
+    Files { file1: PathBuf, file2: PathBuf },
+    // Overview {
+    //     files: Vec<PathBuf>,
+    // },
 }
 
 fn main() -> Result<()> {
@@ -31,7 +31,7 @@ fn main() -> Result<()> {
     match args.command {
         Command::Diff { commit1, commit2 } => run_diff(Command::Diff { commit1, commit2 }),
         Command::Files { file1, file2 } => run_files(Command::Files { file1, file2 }),
-        Command::Overview { files } => run_overview(Command::Overview { files }),
+        // Command::Overview { files } => run_overview(Command::Overview { files }),
     }
 }
 
@@ -51,7 +51,6 @@ fn run_diff(command: Command) -> Result<()> {
         .changed_files
         .into_iter()
         .filter(|c| c.path.extension().map_or(false, |ext| ext == "rs"));
-
 
     for changed_file in changes {
         let path = changed_file.path;
@@ -98,15 +97,17 @@ fn run_files(c: Command) -> Result<()> {
     Ok(())
 }
 
+#[allow(unused)]
 fn run_overview(c: Command) -> Result<()> {
-    let Command::Overview { files } = c else {
-        unreachable!();
-    };
+    // let Command::Overview { files } = c else {
+    //     unreachable!();
+    // };
 
-    for file in files {
-        let overview = Overview::try_from(file).context("Error getting overview")?;
-        println!("{overview}");
-    }
+    // for file in files {
+    //     let overview = Overview::try_from(file).context("Error getting overview")?;
+    //     println!("{overview}");
+    // }
 
-    Ok(())
+    // Ok(())
+    todo!()
 }
