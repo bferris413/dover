@@ -2,10 +2,10 @@
 dover (**d**iff **over**view) is a CLI tool for summarizing git diffs of Rust code. dover diffs provide a semantic, high-level overview of the changes tracked by git.
 
 #### Note
-While usable, this project is very prototype-y, both in terms of output format and implementation. Updates are made on a semi-dialy basis, but it's still in the early stages. See the roadmap for planned features and changes.
+While usable, this project is very prototype-y, both in terms of output format and implementation. Updates are made regularly, but it's still in the early stages. See [the roadmap](#-todo) for planned features and changes.
 
 # Installation
-If you're building from source or using cargo, lou'll need a recent version of Rust, which you can get [here](https://www.rust-lang.org/learn/get-started).
+If you're building from source or using cargo, you'll need a recent version of Rust, which you can get [here](https://www.rust-lang.org/learn/get-started).
 ## Using cargo
 ```sh
 cargo install dover
@@ -28,7 +28,29 @@ The main entry point is the `diff` subcommand, meant to emulate the behavior of 
 # like git diff [c1 [c2]]
 dover diff [c1 [c2]]
 ```
-`c1` and `c2` must be valid commit SHAs, but support is planned for branch names, refnames like `HEAD`, and selections like `HEAD~2`.
+If present, `c1` and `c2` must be valid commit SHAs. Support is planned for branch names, refnames like `HEAD`, and selections like `HEAD~2`.
+
+See `dover --help` for all supported commands.
+
+# ✅ TODO
+- [X] structs
+- [X] enums
+- [X] traits
+  - [X] signatures
+  - [X] functions
+  - [ ] `const`
+  - [ ] macro
+  - [ ] type declarations
+- [X] functions - standalone
+- [ ] modules
+- [X] `use` statements
+- [X] `impl` blocks
+  - [X] functions
+  - [ ] `const`
+  - [ ] macro
+  - [ ] type declarations
+- [ ] attributes
+- [ ] user config (`dover.toml`)
 
 # FAQ
 #### Q: What's the intended use case?
@@ -41,11 +63,14 @@ A: No, dover doesn't do any versioning or source control. It's an optional suppl
 A: dover has two major dependencies: [git2](https://github.com/rust-lang/git2-rs) for reading git repositories and [syn](https://github.com/dtolnay/syn) for parsing Rust source files. For each added, modified, or removed file in a git diff, dover uses syn to parse the source and collect an opinionated subset (the "overview") of the AST. The overview ASTs are then compared and the resulting diff is printed.
 
 #### Q: Why don't you include \<this language feature\> in diffs?
-A: I probably just haven't gotten to that feature yet. As of `3397ad3a5a80c32b5ab9d29d955af5b1e77163b3`, dover supports structs, enums, traits, function signatures, `use` statements, and `impl` blocks. See the roadmap for missing-but-planned items.
+A: I probably just haven't gotten to that feature yet. As of `3397ad3a5a80c32b5ab9d29d955af5b1e77163b3`, dover supports most parts of structs, enums, traits, function signatures, `use` statements, and `impl` blocks. See [the roadmap](#-todo) for missing-but-planned items.
 
 #### Q: Rust only?
 A: Correct, no other languages are planned, for a couple reasons:
-* This project is for me: my driver at work is Rust,
+* This project is for me: my daily driver at work (and home) is Rust,
 * This project is about exploring the idea of a "diff overview" rather than providing a general purpose implementation.
 
 If you're interested in implementing the idea and want multi-language support, consider using [tree-sitter](https://github.com/tree-sitter/tree-sitter) for the parser.
+
+#### Q: Don't semantic diffing tools already exist?
+A: They sure do. While tools like [difftastic](https://github.com/Wilfred/difftastic), [SemanticDiff](https://semanticdiff.com/), and [DiffLens](https://www.difflens.com/) will provide a semantic diff of your code, dover's goal is to explore the idea of providing an opinionated, configurable _overview_ of changes so you can get a glimpse of what's coming before diving into the full diff.
