@@ -7,8 +7,26 @@ use dover::{Diff, GitChange, Overview, Treeish};
 #[derive(Debug, Parser)]
 #[command(author, version, about = "Diff OVERview")]
 struct Cli {
+    #[arg(long, default_value_t = false)]
+    to_html: bool,
+
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Copy, Clone)]
+enum OutputFormat {
+    Html,
+    Plain,
+}
+impl OutputFormat {
+    fn new(to_html: bool) -> Self {
+        if to_html {
+            OutputFormat::Html
+        } else {
+            OutputFormat::Plain
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -28,14 +46,16 @@ enum Command {
 
 fn main() -> Result<()> {
     let args = Cli::parse();
+    let output = OutputFormat::new(args.to_html);
+
     match args.command {
-        Command::Diff { commit1, commit2 } => run_diff(Command::Diff { commit1, commit2 }),
-        Command::Files { file1, file2 } => run_files(Command::Files { file1, file2 }),
-        // Command::Overview { files } => run_overview(Command::Overview { files }),
+        Command::Diff { commit1, commit2 } => run_diff(Command::Diff { commit1, commit2 }, output),
+        Command::Files { file1, file2 } => run_files(Command::Files { file1, file2 }, output),
+        // Command::Overview { files } => run_overview(Command::Overview { files }, &output),
     }
 }
 
-fn run_diff(command: Command) -> Result<()> {
+fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
     let Command::Diff { commit1, commit2 } = command else {
         unreachable!();
     };
@@ -85,7 +105,7 @@ fn run_diff(command: Command) -> Result<()> {
     Ok(())
 }
 
-fn run_files(c: Command) -> Result<()> {
+fn run_files(c: Command, output: OutputFormat) -> Result<()> {
     let Command::Files { file1, file2 } = c else {
         unreachable!();
     };

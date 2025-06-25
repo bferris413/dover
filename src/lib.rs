@@ -20,7 +20,7 @@ use overview::uses::{self, Uses, UsesDiff};
 mod git;
 mod overview;
 
-pub use git::{get_changed_files, Change as GitChange, ChangedFile, Treeish};
+pub use git::{Change as GitChange, ChangedFile, Treeish, get_changed_files};
 
 const DEFAULT_MAX_COL_W: usize = 50;
 
@@ -37,6 +37,10 @@ pub trait Diff {
 
 pub trait View {
     fn as_viewable(&self) -> ViewableDiffs;
+}
+
+pub trait Html {
+    fn to_html(&self) -> String;
 }
 
 #[derive(Debug)]
@@ -81,6 +85,24 @@ impl ViewableDiffs {
         }
 
         self.vds = vec![ViewableDiff { old, new }];
+    }
+}
+impl Html for ViewableDiffs {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+
+        for vd in self.vds.iter() {
+            if let Some(ref old) = vd.old {
+                todo!()
+                // html.push_str(&format!("<div class=\"old\">{}</div>", old));
+            }
+            if let Some(ref new) = vd.new {
+                todo!()
+                // html.push_str(&format!("<div class=\"new\">{}</div>", new));
+            }
+        }
+
+        html
     }
 }
 
