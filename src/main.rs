@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use dover::{Diff, GitChange, Overview, Treeish};
+use dover::{Diff, GitChange, Html, Overview, Treeish};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "Diff OVERview")]
@@ -83,21 +83,33 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
                     .context("Error getting overview")?;
                 let overview2 =
                     Overview::try_from((path, after_contents)).context("Error getting overview")?;
-                println!("{}", overview1.diff_with(&overview2));
+
+                match output {
+                    OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
+                    OutputFormat::Html => println!("{}", overview1.diff_with(&overview2).to_html()),
+                }
             }
             GitChange::Added { contents } => {
                 let overview1 = Overview::try_from((path.clone(), "".to_string()))
                     .context("Error getting overview")?;
                 let overview2 =
                     Overview::try_from((path, contents)).context("Error getting overview")?;
-                println!("{}", overview1.diff_with(&overview2));
+
+                match output {
+                    OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
+                    OutputFormat::Html => println!("{}", overview1.diff_with(&overview2).to_html()),
+                }
             }
             GitChange::Deleted { contents } => {
                 let overview1 = Overview::try_from((path.clone(), contents))
                     .context("Error getting overview")?;
                 let overview2 =
                     Overview::try_from((path, "".to_string())).context("Error getting overview")?;
-                println!("{}", overview1.diff_with(&overview2));
+
+                match output {
+                    OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
+                    OutputFormat::Html => println!("{}", overview1.diff_with(&overview2).to_html()),
+                }
             }
         }
     }
@@ -112,7 +124,12 @@ fn run_files(c: Command, output: OutputFormat) -> Result<()> {
 
     let overview1 = Overview::try_from(file1).context("Error getting overview for file1")?;
     let overview2 = Overview::try_from(file2).context("Error getting overview for file2")?;
-    println!("{}", overview1.diff_with(&overview2));
+
+    let file_diff = overview1.diff_with(&overview2);
+    match output {
+        OutputFormat::Plain => println!("{}", file_diff),
+        OutputFormat::Html => println!("{}", file_diff.to_html()),
+    }
 
     Ok(())
 }

@@ -18,6 +18,7 @@ use overview::structs::{Struct, Structs, StructsDiff};
 use overview::uses::{self, Uses, UsesDiff};
 
 mod git;
+mod html;
 mod overview;
 
 pub use git::{Change as GitChange, ChangedFile, Treeish, get_changed_files};
@@ -89,20 +90,48 @@ impl ViewableDiffs {
 }
 impl Html for ViewableDiffs {
     fn to_html(&self) -> String {
-        let mut html = String::new();
+        let mut html = "<div class=\"diff-container\">".to_string();
 
         for vd in self.vds.iter() {
+            html.push_str("<div class=\"diff-section old\">\n");
             if let Some(ref old) = vd.old {
-                todo!()
-                // html.push_str(&format!("<div class=\"old\">{}</div>", old));
-            }
-            if let Some(ref new) = vd.new {
-                todo!()
-                // html.push_str(&format!("<div class=\"new\">{}</div>", new));
-            }
-        }
+                let mut running_spans = "<pre>".to_string();
 
-        html
+                for diff in old.iter() {
+                    let class = match diff.0 {
+                        Some(ExistenceChange::Deleted) => "deleted",
+                        Some(ExistenceChange::Added) => unreachable!(),
+                        None => "",
+                    };
+                    running_spans.push_str(&format!("<span class=\"{}\">{}</span>", class, diff.1));
+                }
+                running_spans.push_str("</pre>");
+                html.push_str(&running_spans);
+            }
+            html.push_str("</div>");
+
+            html.push_str("<div class=\"diff-section new\">\n");
+            if let Some(ref new) = vd.new {
+                let mut running_spans = "<pre>".to_string();
+
+                for diff in new.iter() {
+                    let class = match diff.0 {
+                        Some(ExistenceChange::Deleted) => unreachable!(),
+                        Some(ExistenceChange::Added) => "added",
+                        None => "",
+                    };
+                    running_spans.push_str(&format!("<span class=\"{}\">{}</span>", class, diff.1));
+                }
+                running_spans.push_str("</pre>");
+                html.push_str(&running_spans);
+            }
+            html.push_str("</div>");
+        }
+        html.push_str("</div>");
+
+        let html_with_br = html.replace("\n", "<br>");
+
+        html_with_br
     }
 }
 
@@ -433,6 +462,11 @@ impl Display for ExistenceChange {
 
 #[derive(Debug)]
 pub struct Code(String);
+impl Display for Code {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 fn get_overview(path: PathBuf, source: String) -> Result<Overview> {
     let file: File = syn::parse_file(&source).context("Error parsing {path}")?;
@@ -634,6 +668,23 @@ impl OverviewDiff {
             && self.impls_diff.is_empty()
     }
 }
+impl Html for OverviewDiff {
+    fn to_html(&self) -> String {
+        let mut html = html::HTML_BOILERPLATE.to_string();
+
+        html.push_str(&self.uses_diff.as_viewable().to_html());
+        html.push_str(&self.structs_diff.as_viewable().to_html());
+        html.push_str(&self.enums_diff.as_viewable().to_html());
+        html.push_str(&self.traits_diff.as_viewable().to_html());
+        html.push_str(&self.functions_diff.as_viewable().to_html());
+        html.push_str(&self.impls_diff.as_viewable().to_html());
+
+        html.push_str("</body></html>");
+
+        html
+    }
+}
+
 impl Display for OverviewDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.all_empty() {
