@@ -7,42 +7,75 @@ pub const HTML_BOILERPLATE: &str = r#"
     <title>Diff OVERview</title>
     <style>
         body {
+            padding: 5px;
+        }
+        /* General table styling */
+        table {
+            width: 100%;
+            margin-bottom: 10px;
+            border-collapse: separate;
+            border: 1px solid #d0d7de;
+            border-radius: 5px;
+            overflow: hidden;
+            font-size: 12px;
+        }
+
+        /* Filename row styling */
+        th.filename {
+            text-align: left;
             font-family: monospace;
-            margin: 0;
-            padding: 0;
+            font-weight: normal;
+            background-color: #f4f6fc;
+            padding: 8px 12px;
+            border-bottom: 1px solid #d0d7de;
         }
-        .diff-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.5rem;
-            padding: 0.25rem;
+
+        /* Section headers (e.g., "Uses", "Impls") */
+        tr th {
+            text-align: left;
+            font-family: monospace;
+            font-weight: normal;
+            background-color: #fafafa;
+            padding: 6px 12px;
+            border-bottom: 1px solid #d0d7de;
         }
-        .diff-section {
-            border: 1px solid #f7f7f7;
-            border-radius: 2px;
-            padding: 0.5rem;
+
+        /* Diff content cells */
+        td {
+            min-width: 90ch;
+            padding: 8px 12px;
+            border-bottom: 1px solid #d0d7de;
+            vertical-align: top;
+            background-color: #ffffff;
+            border-right: 1px solid #d0d7de;
+        }
+
+        td.empty-content {
             background-color: #fdfdfd;
-            overflow: auto;
         }
-        .diff-section.old {
-            /* border-color: #ffe6e6; */
+
+        /* Border for the last column */
+        td:last-child {
+            border-right: none;
         }
-        .diff-section.new {
-            /* border-color: #c8f2c8; */
-        }
-        .diff-header {
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-        }
-        .diff-content {
-            white-space: pre-wrap;
-        }
-        .deleted {
-            color: #db0210;
-        }
+
+        /* Added content */
         .added {
             color: #00ad14;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
 
+        /* Remove the bottom border from the last row */
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Removed content */
+        .deleted {
+            color: #ad0500;
+            padding: 2px 4px;
+            border-radius: 4px;
         }
     </style>
 </head>

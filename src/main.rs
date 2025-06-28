@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use dover::{Diff, GitChange, Html, Overview, Treeish};
+use dover::{Diff, GitChange, HTML_BOILERPLATE, Html, Overview, Treeish};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "Diff OVERview")]
@@ -72,6 +72,8 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
         .into_iter()
         .filter(|c| c.path.extension().map_or(false, |ext| ext == "rs"));
 
+    let mut html = HTML_BOILERPLATE.to_string();
+
     for changed_file in changes {
         let path = changed_file.path;
         match changed_file.change_type {
@@ -86,7 +88,7 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
 
                 match output {
                     OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
-                    OutputFormat::Html => println!("{}", overview1.diff_with(&overview2).to_html()),
+                    OutputFormat::Html => html.push_str(&overview1.diff_with(&overview2).to_html()),
                 }
             }
             GitChange::Added { contents } => {
@@ -97,7 +99,7 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
 
                 match output {
                     OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
-                    OutputFormat::Html => println!("{}", overview1.diff_with(&overview2).to_html()),
+                    OutputFormat::Html => html.push_str(&overview1.diff_with(&overview2).to_html()),
                 }
             }
             GitChange::Deleted { contents } => {
@@ -108,10 +110,15 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
 
                 match output {
                     OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
-                    OutputFormat::Html => println!("{}", overview1.diff_with(&overview2).to_html()),
+                    OutputFormat::Html => html.push_str(&overview1.diff_with(&overview2).to_html()),
                 }
             }
         }
+    }
+
+    if let OutputFormat::Html = output {
+        html.push_str("</body></html>");
+        println!("{}", html);
     }
 
     Ok(())

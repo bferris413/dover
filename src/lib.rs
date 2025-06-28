@@ -22,6 +22,7 @@ mod html;
 mod overview;
 
 pub use git::{Change as GitChange, ChangedFile, Treeish, get_changed_files};
+pub use html::HTML_BOILERPLATE;
 
 const DEFAULT_MAX_COL_W: usize = 50;
 
@@ -51,6 +52,9 @@ pub struct ViewableDiffs {
 impl ViewableDiffs {
     pub fn new(diffs: Vec<ViewableDiff>) -> Self {
         ViewableDiffs { vds: diffs }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.vds.is_empty()
     }
     pub fn empty() -> ViewableDiffs {
         Self { vds: Vec::new() }
@@ -90,48 +94,62 @@ impl ViewableDiffs {
 }
 impl Html for ViewableDiffs {
     fn to_html(&self) -> String {
-        let mut html = "<div class=\"diff-container\">".to_string();
+        let mut html = String::new();
 
         for vd in self.vds.iter() {
-            html.push_str("<div class=\"diff-section old\">\n");
-            if let Some(ref old) = vd.old {
-                let mut running_spans = "<pre>".to_string();
+            html.push_str("<tr>");
 
+            let mut deleted_content = String::new();
+            if let Some(ref old) = vd.old {
                 for diff in old.iter() {
                     let class = match diff.0 {
                         Some(ExistenceChange::Deleted) => "deleted",
                         Some(ExistenceChange::Added) => unreachable!(),
                         None => "",
                     };
-                    running_spans.push_str(&format!("<span class=\"{}\">{}</span>", class, diff.1));
+                    deleted_content
+                        .push_str(&format!("<span class=\"{}\">{}</span>", class, diff.1));
                 }
-                running_spans.push_str("</pre>");
-                html.push_str(&running_spans);
             }
-            html.push_str("</div>");
+            if deleted_content.is_empty() {
+                html.push_str("<td class=\"empty-content\">");
+                html.push_str("</td>");
+            } else {
+                html.push_str("<td>");
+                html.push_str("<pre>");
+                html.push_str(&deleted_content);
+                html.push_str("</pre>");
+                html.push_str("</td>");
+            }
 
-            html.push_str("<div class=\"diff-section new\">\n");
+            let mut added_content = String::new();
+
             if let Some(ref new) = vd.new {
-                let mut running_spans = "<pre>".to_string();
-
                 for diff in new.iter() {
                     let class = match diff.0 {
                         Some(ExistenceChange::Deleted) => unreachable!(),
                         Some(ExistenceChange::Added) => "added",
                         None => "",
                     };
-                    running_spans.push_str(&format!("<span class=\"{}\">{}</span>", class, diff.1));
+                    added_content.push_str(&format!("<span class=\"{}\">{}</span>", class, diff.1));
                 }
-                running_spans.push_str("</pre>");
-                html.push_str(&running_spans);
             }
-            html.push_str("</div>");
+            if added_content.is_empty() {
+                html.push_str("<td class=\"empty-content\">");
+                html.push_str("</td>");
+            } else {
+                html.push_str("<td>");
+                html.push_str("<pre>");
+                html.push_str(&added_content);
+                html.push_str("</pre>");
+                html.push_str("</td>");
+            }
         }
-        html.push_str("</div>");
 
-        let html_with_br = html.replace("\n", "<br>");
+        // let html_with_br = html.replace("\n", "<br>");
 
-        html_with_br
+        // html_with_br
+        html
     }
 }
 
@@ -670,16 +688,47 @@ impl OverviewDiff {
 }
 impl Html for OverviewDiff {
     fn to_html(&self) -> String {
-        let mut html = html::HTML_BOILERPLATE.to_string();
+        let mut html = "<table>".to_string();
+        html.push_str(&format!(
+            "<tr><th colspan=\"2\" class=\"filename\">{}</th></tr>",
+            self.file1.display()
+        ));
 
-        html.push_str(&self.uses_diff.as_viewable().to_html());
-        html.push_str(&self.structs_diff.as_viewable().to_html());
-        html.push_str(&self.enums_diff.as_viewable().to_html());
-        html.push_str(&self.traits_diff.as_viewable().to_html());
-        html.push_str(&self.functions_diff.as_viewable().to_html());
-        html.push_str(&self.impls_diff.as_viewable().to_html());
+        let uses_diffs = self.uses_diff.as_viewable();
+        if !uses_diffs.is_empty() {
+            html.push_str("<tr><th colspan=\"2\">Uses</th></tr>");
+            html.push_str(&self.uses_diff.as_viewable().to_html());
+        }
 
-        html.push_str("</body></html>");
+        let structs_diffs = self.structs_diff.as_viewable();
+        if !structs_diffs.is_empty() {
+            html.push_str("<tr><th colspan=\"2\">Structs</th></tr>");
+            html.push_str(&self.structs_diff.as_viewable().to_html());
+        }
+
+        let enums_diffs = self.enums_diff.as_viewable();
+        if !enums_diffs.is_empty() {
+            html.push_str("<tr><th colspan=\"2\">Enums</th></tr>");
+            html.push_str(&self.enums_diff.as_viewable().to_html());
+        }
+
+        let traits_diffs = self.traits_diff.as_viewable();
+        if !traits_diffs.is_empty() {
+            html.push_str("<tr><th colspan=\"2\">Traits</th></tr>");
+            html.push_str(&self.traits_diff.as_viewable().to_html());
+        }
+
+        let functions_diffs = self.functions_diff.as_viewable();
+        if !functions_diffs.is_empty() {
+            html.push_str("<tr><th colspan=\"2\">Functions</th></tr>");
+            html.push_str(&self.functions_diff.as_viewable().to_html());
+        }
+
+        let impls_diffs = self.impls_diff.as_viewable();
+        if !impls_diffs.is_empty() {
+            html.push_str("<tr><th colspan=\"2\">Impls</th></tr>");
+            html.push_str(&self.impls_diff.as_viewable().to_html());
+        }
 
         html
     }
