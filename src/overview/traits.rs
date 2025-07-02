@@ -3,15 +3,15 @@ use std::{
     ops::{Deref, Range},
 };
 
-use syn::{spanned::Spanned, Item, ItemTrait, TraitItem, Visibility};
+use syn::{Item, ItemTrait, TraitItem, Visibility, spanned::Spanned};
 
 use super::{
     functions::{Functions, FunctionsDiff},
     generics::{Generics, GenericsDiff},
 };
 use crate::{
-    collect_src_maps, get_source, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
-    ViewableDiff, ViewableDiffs, VisDiff,
+    ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
+    VisDiff, collect_src_maps, get_source,
 };
 
 const NO_SRC_ERROR: &str = "No source text for trait, was parse logic changed?";
@@ -256,13 +256,13 @@ impl View for TraitDiff {
                     return ViewableDiffs::new(vec![ViewableDiff {
                         old: Some(change),
                         new: None,
-                    }])
+                    }]);
                 }
                 ExistenceChange::Added => {
                     return ViewableDiffs::new(vec![ViewableDiff {
                         old: None,
                         new: Some(change),
-                    }])
+                    }]);
                 }
             };
         }

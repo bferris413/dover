@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::{ByteRange, Change, Code, Diff, ExistenceChange, View, ViewableDiff, ViewableDiffs};
 
-use syn::{spanned::Spanned, FieldMutability, Type};
+use syn::{FieldMutability, Type, spanned::Spanned};
 
 const NO_SRC_ERROR: &str = "No source text for field, was parse logic changed?";
 
@@ -83,6 +83,9 @@ impl FieldsDiff {
     pub fn diffs(&self) -> &[FieldDiff] {
         &self.diffs
     }
+    pub fn len(&self) -> usize {
+        self.diffs.len()
+    }
 }
 
 impl Diff for syn::Field {
@@ -131,10 +134,7 @@ impl View for FieldDiff {
             vec![(Some(ExistenceChange::Added), Code(format!("{source}")))]
         });
 
-        ViewableDiffs::new(vec![ViewableDiff {
-            old,
-            new,
-        }])
+        ViewableDiffs::new(vec![ViewableDiff { old, new }])
     }
 }
 impl ByteRange for FieldDiff {

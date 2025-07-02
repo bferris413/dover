@@ -2,14 +2,14 @@ use std::fmt::{Display, Formatter};
 use std::ops::Range;
 
 use syn::{
+    Abi, FnArg, ImplItemFn, ItemFn, ReturnType, Visibility,
     spanned::Spanned,
     token::{Async, Const, Unsafe},
-    Abi, FnArg, ImplItemFn, ItemFn, ReturnType, Visibility,
 };
 use syn::{Block, TraitItemFn};
 
 use super::generics::{Generics, GenericsDiff};
-use crate::{collect_src_maps, ByteRange, Code, ViewableDiffs};
+use crate::{ByteRange, Code, ViewableDiffs, collect_src_maps};
 use crate::{Change, Diff, ExistenceChange, SourceFile, View, ViewableDiff, VisDiff};
 
 const NO_SRC_ERROR: &str = "No source text for function, was parse logic changed?";
