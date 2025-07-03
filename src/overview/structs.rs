@@ -7,7 +7,7 @@ use syn::{ItemStruct, Visibility, spanned::Spanned};
 
 use crate::{
     ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
-    VisDiff, collect_src_maps,
+    VisDiff, collect_src_maps, overview::fields::FieldDiff,
 };
 
 use super::{
@@ -235,6 +235,7 @@ impl View for StructDiff {
             &self.old_src.as_ref().unwrap().0.as_bytes(),
             &self.old_src_map,
             &self.fields_diff,
+            ExistenceChange::Deleted,
         );
 
         let new_diff = collect_struct_diff_changes(
@@ -242,6 +243,7 @@ impl View for StructDiff {
             &self.new_src.as_ref().unwrap().0.as_bytes(),
             &self.new_src_map,
             &self.fields_diff,
+            ExistenceChange::Added,
         );
 
         ViewableDiffs::new(vec![ViewableDiff {
@@ -282,6 +284,7 @@ fn collect_struct_diff_changes(
     source_code: &[u8],
     source_map: &[Range<usize>],
     field_diffs: &Option<FieldsDiff>,
+    ex: ExistenceChange,
 ) -> Vec<(Option<ExistenceChange>, Code)> {
     let source_range = struct_.span().byte_range();
     let decl_start = source_range.start;
@@ -303,7 +306,7 @@ fn collect_struct_diff_changes(
                 let substring = source_code[i..diff_range.end].to_vec();
                 let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
 
-                diff_changes.push((Some(ExistenceChange::Deleted), code));
+                diff_changes.push((Some(ex), code));
 
                 src_i = diff_index + 1;
                 i = diff_range.end;
@@ -329,16 +332,36 @@ fn collect_struct_diff_changes(
     }
 
     if let Some(field_diffs) = field_diffs {
-        let diffs_as_changes =
-            collect_field_diffs(source_code, &source_range, sig_end, field_diffs);
+        let (get_orig_field, get_sub_diff): (
+            Box<dyn Fn(&FieldDiff) -> Option<&syn::Field>>,
+            Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
+        );
+        match ex {
+            ExistenceChange::Added => {
+                get_orig_field = Box::new(|fd: &FieldDiff| fd.new());
+                get_sub_diff = Box::new(|vd: ViewableDiff| vd.new);
+            }
+            ExistenceChange::Deleted => {
+                get_orig_field = Box::new(|fd: &FieldDiff| fd.old());
+                get_sub_diff = Box::new(|vd: ViewableDiff| vd.old);
+            }
+        };
+        let diffs_as_changes = collect_field_diffs(
+            source_code,
+            &source_range,
+            sig_end,
+            field_diffs,
+            get_orig_field,
+            get_sub_diff,
+        );
         diff_changes.extend(diffs_as_changes);
     }
 
     // collect remaining whitespace and closing ')' or '}'
     let code = String::from_utf8(source_code[fields_end..source_range.end].to_vec())
         .expect("Off a code boundary");
-    diff_changes.push((None, Code(code)));
 
+    diff_changes.push((None, Code(code)));
     diff_changes
 }
 
@@ -347,26 +370,35 @@ fn collect_field_diffs(
     // The full source code for the file we're parsing
     source_code: &[u8],
     // The byte range in the source code of the struct we're parsing
-    new_struct_range: &Range<usize>,
+    struct_range: &Range<usize>,
     // The index at which the signature ends
     sig_end: usize,
     // The field diffs for the file we're parsing
     fds: &FieldsDiff,
+    // How to get the original syn::Field from a field diff (old or new method)
+    get_original_field: Box<dyn Fn(&FieldDiff) -> Option<&syn::Field>>,
+    // How to get sub diffs from a given viewable diff (old or new field)
+    get_sub_diffs: Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
 ) -> Vec<(Option<ExistenceChange>, Code)> {
     let mut diffs = Vec::new();
     let mut i = sig_end;
 
-    while i < new_struct_range.end {
+    while i < struct_range.end {
         let maybe_item_diff = fds.diffs().iter().find(|d| {
-            d.new()
+            get_original_field(d)
                 .as_ref()
-                .map(|new_func| new_func.span().byte_range().contains(&i))
+                .map(|field| field.span().byte_range().contains(&i))
                 .unwrap_or(false)
         });
         match maybe_item_diff {
             Some(id) => {
                 // Going to walk backwards and get all preceding whitespace until a newline or a character
-                let item_diff_start = id.new().as_ref().unwrap().span().byte_range().start;
+                let item_diff_start = get_original_field(id)
+                    .as_ref()
+                    .unwrap()
+                    .span()
+                    .byte_range()
+                    .start;
                 let mut item_diff_whitespace_start = item_diff_start as isize - 1;
 
                 while item_diff_whitespace_start > 0 {
@@ -395,12 +427,17 @@ fn collect_field_diffs(
                 // then get the actual diff
                 let viewable = id.as_viewable();
                 for diff in viewable.vds {
-                    if let Some(new) = diff.new {
-                        diffs.extend(new);
+                    if let Some(sub_diff) = get_sub_diffs(diff) {
+                        diffs.extend(sub_diff);
                     }
                 }
 
-                i = id.new().as_ref().unwrap().span().byte_range().end;
+                i = get_original_field(id)
+                    .as_ref()
+                    .unwrap()
+                    .span()
+                    .byte_range()
+                    .end;
             }
             None => {
                 i += 1;
