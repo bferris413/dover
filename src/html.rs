@@ -14,6 +14,7 @@ pub const HTML_BOILERPLATE: &str = r#"
             width: 100%;
             margin-bottom: 10px;
             border-collapse: separate;
+            border-spacing: 0;
             border: 1px solid #d0d7de;
             border-radius: 5px;
             overflow: hidden;

@@ -1,14 +1,15 @@
 use std::{collections::HashMap, fmt, ops::Range};
 
 use syn::{
+    ImplItem, ItemImpl, Path, Type,
     spanned::Spanned,
     token::{For, Not, Unsafe},
-    ImplItem, ItemImpl, Path, Type,
 };
 
 use crate::{
-    collect_src_maps, overview::functions::Functions, ByteRange, Change, Code, Diff,
-    ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
+    ASCII_LINE_FEED, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
+    ViewableDiff, ViewableDiffs, collect_src_maps,
+    overview::functions::{Function, FunctionDiff, Functions},
 };
 
 use super::{
@@ -360,223 +361,32 @@ impl View for ImplDiff {
     fn as_viewable(&self) -> ViewableDiffs {
         let mut old_diff = Vec::new();
         if let Some(old) = self.old.as_ref() {
-            let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
-
-            let old_range = old.span().byte_range();
-            let decl_start = old_range.start;
-            let decl_end = old.brace_token.span.span().byte_range().start + 1;
-
-            let mut i = decl_start;
-            let mut src_i = 0;
-
-            while i < decl_end {
-                let maybe_diff_index = self.old_src_map[src_i..]
-                    .iter()
-                    .position(|r| r.contains(&i));
-                match maybe_diff_index {
-                    Some(diff_index) => {
-                        let diff_range = &self.old_src_map[src_i..][diff_index];
-
-                        // doesn't make sense that we wouldn't be aligned with the start of a range
-                        assert_eq!(i, diff_range.start);
-                        let substring = old_src[i..diff_range.end].to_vec();
-                        let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                        old_diff.push((Some(ExistenceChange::Deleted), code));
-
-                        src_i = diff_index + 1;
-                        i = diff_range.end;
-                    }
-                    None => {
-                        let start = i;
-                        while i < decl_end {
-                            let maybe_diff_index = self.old_src_map[src_i..]
-                                .iter()
-                                .position(|r| r.contains(&i));
-                            if maybe_diff_index.is_some() {
-                                break;
-                            } else {
-                                i += 1
-                            }
-                        }
-                        // We're either off the end or we've found a new diff. Either way,
-                        // start..i contains our next range
-                        let substring = old_src[start..i].to_vec();
-                        let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-
-                        if let Change::Existence(ExistenceChange::Deleted) = self.change {
-                            old_diff.push((Some(ExistenceChange::Deleted), code));
-                        } else {
-                            assert!(matches!(self.change, Change::Modified));
-                            old_diff.push((None, code));
-                        }
-                    }
-                }
-            }
-
-            if let Some(ids) = &self.items_diff {
-                let mut i = decl_end;
-
-                while i < old_range.end {
-                    let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| {
-                        d.old()
-                            .as_ref()
-                            .map(|old_func| old_func.original().span().byte_range().contains(&i))
-                            .unwrap_or(false)
-                    });
-                    match maybe_item_diff {
-                        Some(id) => {
-                            let viewable = id.as_viewable();
-                            for diff in viewable.vds {
-                                if let Some(old) = diff.old {
-                                    old_diff.extend(old);
-                                }
-                            }
-
-                            i = id
-                                .old()
-                                .as_ref()
-                                .unwrap()
-                                .original()
-                                .span()
-                                .byte_range()
-                                .end;
-                        }
-                        None => {
-                            if old_src[i].is_ascii_whitespace() {
-                                let start = i;
-                                while i < old_range.end && old_src[i].is_ascii_whitespace() {
-                                    i += 1;
-                                }
-
-                                let substring = old_src[start..i].to_vec();
-                                let code = Code(
-                                    String::from_utf8(substring).expect("Off a code boundary"),
-                                );
-                                old_diff.push((None, code));
-                            } else {
-                                i += 1;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let Change::Existence(ExistenceChange::Deleted) = self.change {
-                old_diff.push((Some(ExistenceChange::Deleted), Code("}\n".to_string())));
-            } else {
-                assert!(matches!(self.change, Change::Modified));
-                old_diff.push((None, Code("}\n".to_string())));
-            }
+            old_diff = collect_impl_diff_changes(
+                old,
+                &self.old_src.as_ref().unwrap().0.as_bytes(),
+                &self.old_src_map,
+                ExistenceChange::Deleted,
+                match self.change {
+                    Change::Existence(ex) => dbg!(Some(ex)),
+                    Change::Modified => None,
+                },
+                &self.items_diff,
+            );
         }
 
         let mut new_diff = Vec::new();
         if let Some(new) = self.new.as_ref() {
-            let new_src = &self.new_src.as_ref().unwrap().0.as_bytes();
-
-            let new_range = new.span().byte_range();
-            let decl_start = new_range.start;
-            let decl_end = new.brace_token.span.span().byte_range().start + 1; // we'll take the "{"
-
-            let mut i = decl_start;
-            let mut src_i = 0;
-
-            while i < decl_end {
-                let maybe_diff_index = self.new_src_map[src_i..]
-                    .iter()
-                    .position(|r| r.contains(&i));
-                match maybe_diff_index {
-                    Some(diff_index) => {
-                        let diff_range = &self.new_src_map[src_i..][diff_index];
-
-                        // doesn't make sense that we wouldn't be aligned with the start of a range
-                        assert_eq!(i, diff_range.start);
-                        let substring = new_src[i..diff_range.end].to_vec();
-                        let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                        new_diff.push((Some(ExistenceChange::Added), code));
-
-                        src_i = diff_index + 1;
-                        i = diff_range.end;
-                    }
-                    None => {
-                        let start = i;
-                        while i < decl_end {
-                            let maybe_diff_index = self.new_src_map[src_i..]
-                                .iter()
-                                .position(|r| r.contains(&i));
-                            if maybe_diff_index.is_some() {
-                                break;
-                            } else {
-                                i += 1
-                            }
-                        }
-                        // We're either off the end or we've found a new diff. Either way,
-                        // start..i contains our next range
-                        let substring = new_src[start..i].to_vec();
-                        let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-
-                        if let Change::Existence(ExistenceChange::Added) = self.change {
-                            new_diff.push((Some(ExistenceChange::Added), code));
-                        } else {
-                            assert!(matches!(self.change, Change::Modified));
-                            new_diff.push((None, code));
-                        }
-                    }
-                }
-            }
-
-            if let Some(ids) = &self.items_diff {
-                let mut i = decl_end;
-                while i < new_range.end {
-                    let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| {
-                        d.new()
-                            .as_ref()
-                            .map(|new_func| new_func.original().span().byte_range().contains(&i))
-                            .unwrap_or(false)
-                    });
-                    match maybe_item_diff {
-                        Some(id) => {
-                            let viewable = id.as_viewable();
-                            for diff in viewable.vds {
-                                if let Some(new) = diff.new {
-                                    new_diff.extend(new);
-                                }
-                            }
-
-                            i = id
-                                .new()
-                                .as_ref()
-                                .unwrap()
-                                .original()
-                                .span()
-                                .byte_range()
-                                .end;
-                        }
-                        None => {
-                            if new_src[i].is_ascii_whitespace() {
-                                let start = i;
-                                while i < new_range.end && new_src[i].is_ascii_whitespace() {
-                                    i += 1;
-                                }
-
-                                let substring = new_src[start..i].to_vec();
-                                let code = Code(
-                                    String::from_utf8(substring).expect("Off a code boundary"),
-                                );
-                                new_diff.push((None, code));
-                            } else {
-                                i += 1;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let Change::Existence(ExistenceChange::Added) = self.change {
-                new_diff.push((Some(ExistenceChange::Added), Code("}\n".to_string())));
-            } else {
-                assert!(matches!(self.change, Change::Modified));
-                new_diff.push((None, Code("}\n".to_string())));
-            }
+            new_diff = collect_impl_diff_changes(
+                new,
+                &self.new_src.as_ref().unwrap().0.as_bytes(),
+                &self.new_src_map,
+                ExistenceChange::Added,
+                match self.change {
+                    Change::Existence(ex) => dbg!(Some(ex)),
+                    Change::Modified => None,
+                },
+                &self.items_diff,
+            );
         }
 
         ViewableDiffs::new(vec![ViewableDiff {
@@ -592,6 +402,183 @@ impl View for ImplDiff {
             },
         }])
     }
+}
+
+fn collect_impl_diff_changes(
+    impl_: &ItemImpl,
+    source_code: &[u8],
+    source_map: &[Range<usize>],
+    change_for_diffs: ExistenceChange,
+    maybe_change_for_diffs: Option<ExistenceChange>,
+    items_diff: &Option<ImplItemsDiff>,
+) -> Vec<(Option<ExistenceChange>, Code)> {
+    let impl_range = impl_.span().byte_range();
+    let decl_start = impl_range.start;
+    let sig_end = impl_.brace_token.span.span().byte_range().start + 1; // we'll take the "{"
+    let items_end = end_index_of_items(impl_, source_code);
+
+    let mut i = decl_start;
+    let mut src_i = 0;
+    let mut diffs = Vec::new();
+
+    while i < sig_end {
+        let maybe_diff_index = source_map[src_i..].iter().position(|r| r.contains(&i));
+        match maybe_diff_index {
+            Some(diff_index) => {
+                let diff_range = &source_map[src_i..][diff_index];
+
+                // doesn't make sense that we wouldn't be aligned with the start of a range
+                assert_eq!(i, diff_range.start);
+                let substring = source_code[i..diff_range.end].to_vec();
+                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+                diffs.push((Some(change_for_diffs), code));
+
+                src_i = diff_index + 1;
+                i = diff_range.end;
+            }
+            None => {
+                let start = i;
+                while i < sig_end {
+                    let maybe_diff_index = source_map[src_i..].iter().position(|r| r.contains(&i));
+                    if maybe_diff_index.is_some() {
+                        break;
+                    } else {
+                        i += 1
+                    }
+                }
+                // We're either off the end or we've found a new diff. Either way,
+                // start..i contains our next range
+                let substring = source_code[start..i].to_vec();
+                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+
+                diffs.push((maybe_change_for_diffs, code));
+            }
+        }
+    }
+
+    if let Some(ids) = items_diff {
+        let (get_orig_field, get_sub_diff): (
+            Box<dyn Fn(&FunctionDiff) -> &Option<Function>>,
+            Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
+        );
+        match change_for_diffs {
+            ExistenceChange::Added => {
+                get_orig_field = Box::new(|fd: &FunctionDiff| fd.new());
+                get_sub_diff = Box::new(|vd: ViewableDiff| vd.new);
+            }
+            ExistenceChange::Deleted => {
+                get_orig_field = Box::new(|fd: &FunctionDiff| fd.old());
+                get_sub_diff = Box::new(|vd: ViewableDiff| vd.old);
+            }
+        };
+        let item_diff_changes = collect_item_diffs(
+            source_code,
+            &impl_range,
+            sig_end,
+            ids,
+            get_orig_field,
+            get_sub_diff,
+        );
+        diffs.extend(item_diff_changes);
+    }
+
+    // collect remaining whitespace and closing ')' or '}'
+    let code = String::from_utf8(source_code[items_end..impl_range.end].to_vec())
+        .expect("Off a code boundary");
+
+    diffs.push((maybe_change_for_diffs, Code(code)));
+    diffs
+}
+
+fn collect_item_diffs(
+    // The full source code for the file we're parsing
+    source_code: &[u8],
+    // The byte range in the source code of the impl we're parsing
+    impl_range: &Range<usize>,
+    // The index at which the signature ends
+    sig_end: usize,
+    // The item diffs for the file we're parsing
+    ids: &ImplItemsDiff,
+    // How to get the original function from a item diff (old or new method)
+    get_original_item: Box<dyn Fn(&FunctionDiff) -> &Option<Function>>,
+    // How to get sub diffs from a given viewable diff (old or new field)
+    get_sub_diffs: Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
+) -> Vec<(Option<ExistenceChange>, Code)> {
+    let mut i = sig_end;
+    let mut diffs = Vec::new();
+
+    while dbg!(i) < impl_range.end {
+        let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| {
+            get_original_item(d)
+                .as_ref()
+                .map(|func| func.original().span().byte_range().contains(&i))
+                .unwrap_or(false)
+        });
+        match maybe_item_diff {
+            Some(id) => {
+                // Going to walk backwards and get all preceding whitespace until a newline or a character
+                let item_diff_range = get_original_item(id)
+                    .as_ref()
+                    .unwrap()
+                    .original()
+                    .span()
+                    .byte_range();
+                let item_diff_start = item_diff_range.start;
+                let item_diff_end = item_diff_range.end;
+
+                let mut item_diff_whitespace_start = item_diff_start as isize - 1;
+                while item_diff_whitespace_start > 0 {
+                    if source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
+                        if source_code[item_diff_whitespace_start as usize] == ASCII_LINE_FEED {
+                            break;
+                        } else {
+                            item_diff_whitespace_start -= 1;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                if !source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
+                    // we hit a non-whitespace character which shouldn't be included in our output
+                    item_diff_whitespace_start += 1;
+                }
+
+                let substring =
+                    source_code[item_diff_whitespace_start as usize..item_diff_start].to_vec();
+                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+
+                diffs.push((None, code));
+
+                // then get the actual diff
+                let viewable = id.as_viewable();
+                for diff in viewable.vds {
+                    if let Some(sub_diff) = get_sub_diffs(diff) {
+                        diffs.extend(sub_diff);
+                    }
+                }
+
+                i = item_diff_end;
+            }
+            None => {
+                i += 1;
+            }
+        }
+    }
+
+    diffs
+}
+
+fn end_index_of_items(impl_: &ItemImpl, source_code: &[u8]) -> usize {
+    let mut index_before_close_brace = impl_.span().byte_range().end - 2;
+    while index_before_close_brace > 0
+        && source_code[index_before_close_brace].is_ascii_whitespace()
+    {
+        index_before_close_brace -= 1;
+    }
+
+    index_before_close_brace += 1; // we want 1 index beyond the last char we ended at
+    index_before_close_brace
 }
 
 #[derive(Debug)]

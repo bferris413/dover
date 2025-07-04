@@ -25,6 +25,7 @@ pub use git::{Change as GitChange, ChangedFile, Treeish, get_changed_files};
 pub use html::HTML_BOILERPLATE;
 
 const DEFAULT_MAX_COL_W: usize = 50;
+const ASCII_LINE_FEED: u8 = 10;
 
 pub trait ByteRange {
     fn old_ranges(&self) -> Vec<Range<usize>>;
@@ -694,40 +695,40 @@ impl Html for OverviewDiff {
             self.file1.display()
         ));
 
-        let uses_diffs = self.uses_diff.as_viewable();
-        if !uses_diffs.is_empty() {
+        let viewable_uses = self.uses_diff.as_viewable();
+        if !viewable_uses.is_empty() {
             html.push_str("<tr><th colspan=\"2\">Uses</th></tr>");
-            html.push_str(&self.uses_diff.as_viewable().to_html());
+            html.push_str(&viewable_uses.to_html());
         }
 
-        let structs_diffs = self.structs_diff.as_viewable();
-        if !structs_diffs.is_empty() {
+        let viewable_structs = self.structs_diff.as_viewable();
+        if !viewable_structs.is_empty() {
             html.push_str("<tr><th colspan=\"2\">Structs</th></tr>");
-            html.push_str(&self.structs_diff.as_viewable().to_html());
+            html.push_str(&viewable_structs.to_html());
         }
 
-        let enums_diffs = self.enums_diff.as_viewable();
-        if !enums_diffs.is_empty() {
+        let viewable_enums = self.enums_diff.as_viewable();
+        if !viewable_enums.is_empty() {
             html.push_str("<tr><th colspan=\"2\">Enums</th></tr>");
-            html.push_str(&self.enums_diff.as_viewable().to_html());
+            html.push_str(&viewable_enums.to_html());
         }
 
-        let traits_diffs = self.traits_diff.as_viewable();
-        if !traits_diffs.is_empty() {
+        let viewable_traits = self.traits_diff.as_viewable();
+        if !viewable_traits.is_empty() {
             html.push_str("<tr><th colspan=\"2\">Traits</th></tr>");
-            html.push_str(&self.traits_diff.as_viewable().to_html());
+            html.push_str(&viewable_traits.to_html());
         }
 
-        let functions_diffs = self.functions_diff.as_viewable();
-        if !functions_diffs.is_empty() {
+        let viewable_functions = self.functions_diff.as_viewable();
+        if !viewable_functions.is_empty() {
             html.push_str("<tr><th colspan=\"2\">Functions</th></tr>");
-            html.push_str(&self.functions_diff.as_viewable().to_html());
+            html.push_str(&viewable_functions.to_html());
         }
 
-        let impls_diffs = self.impls_diff.as_viewable();
-        if !impls_diffs.is_empty() {
+        let viewable_impls = self.impls_diff.as_viewable();
+        if !viewable_impls.is_empty() {
             html.push_str("<tr><th colspan=\"2\">Impls</th></tr>");
-            html.push_str(&self.impls_diff.as_viewable().to_html());
+            html.push_str(&viewable_impls.to_html());
         }
 
         html

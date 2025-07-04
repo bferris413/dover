@@ -6,8 +6,8 @@ use std::{
 use syn::{ItemStruct, Visibility, spanned::Spanned};
 
 use crate::{
-    ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
-    VisDiff, collect_src_maps, overview::fields::FieldDiff,
+    ASCII_LINE_FEED, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
+    ViewableDiff, ViewableDiffs, VisDiff, collect_src_maps, overview::fields::FieldDiff,
 };
 
 use super::{
@@ -16,7 +16,6 @@ use super::{
 };
 
 const NO_SRC_ERROR: &str = "No source text for struct, was parse logic changed?";
-const ASCII_LINE_FEED: u8 = 10;
 
 /// A collection of `struct` declarations.
 ///
@@ -393,12 +392,10 @@ fn collect_field_diffs(
         match maybe_item_diff {
             Some(id) => {
                 // Going to walk backwards and get all preceding whitespace until a newline or a character
-                let item_diff_start = get_original_field(id)
-                    .as_ref()
-                    .unwrap()
-                    .span()
-                    .byte_range()
-                    .start;
+                let item_diff_range = get_original_field(id).as_ref().unwrap().span().byte_range();
+                let item_diff_start = item_diff_range.start;
+                let item_diff_end = item_diff_range.end;
+
                 let mut item_diff_whitespace_start = item_diff_start as isize - 1;
 
                 while item_diff_whitespace_start > 0 {
@@ -431,13 +428,7 @@ fn collect_field_diffs(
                         diffs.extend(sub_diff);
                     }
                 }
-
-                i = get_original_field(id)
-                    .as_ref()
-                    .unwrap()
-                    .span()
-                    .byte_range()
-                    .end;
+                i = item_diff_end;
             }
             None => {
                 i += 1;
