@@ -507,7 +507,7 @@ fn collect_item_diffs(
     let mut i = sig_end;
     let mut diffs = Vec::new();
 
-    while dbg!(i) < impl_range.end {
+    while i < impl_range.end {
         let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| {
             get_original_item(d)
                 .as_ref()

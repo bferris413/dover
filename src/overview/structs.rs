@@ -410,6 +410,7 @@ fn collect_field_diffs(
                     }
                 }
 
+                // TODO: this omits commas between fields (applies to variants and traits, too)
                 if !source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
                     // we hit a non-whitespace character which shouldn't be included in our output
                     item_diff_whitespace_start += 1;
@@ -428,6 +429,7 @@ fn collect_field_diffs(
                         diffs.extend(sub_diff);
                     }
                 }
+
                 i = item_diff_end;
             }
             None => {
