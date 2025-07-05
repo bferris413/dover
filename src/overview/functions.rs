@@ -317,7 +317,7 @@ impl View for FunctionDiff {
         let old = self.old.as_ref().unwrap();
         let old_src = &old.source.0.as_bytes();
         let old_start = old.original_fn.span().byte_range().start;
-        let old_end = old.original_fn.block.span().byte_range().start;
+        let old_end = old.original_fn.sig.span().byte_range().end;
         let old_range = old_start..old_end;
 
         let mut i = old_range.start;
@@ -366,7 +366,7 @@ impl View for FunctionDiff {
         let new = self.new.as_ref().unwrap();
         let new_src = &new.source.0.as_bytes();
         let new_start = new.original_fn.span().byte_range().start;
-        let new_end = new.original_fn.block.span().byte_range().start;
+        let new_end = new.original_fn.sig.span().byte_range().end;
         let new_range = new_start..new_end;
 
         let mut i = new_range.start;

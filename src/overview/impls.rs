@@ -457,17 +457,17 @@ fn collect_impl_diff_changes(
     }
 
     if let Some(ids) = items_diff {
-        let (get_orig_field, get_sub_diff): (
+        let (get_orig_item, get_sub_diff): (
             Box<dyn Fn(&FunctionDiff) -> &Option<Function>>,
             Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
         );
         match change_for_diffs {
             ExistenceChange::Added => {
-                get_orig_field = Box::new(|fd: &FunctionDiff| fd.new());
+                get_orig_item = Box::new(|fd: &FunctionDiff| fd.new());
                 get_sub_diff = Box::new(|vd: ViewableDiff| vd.new);
             }
             ExistenceChange::Deleted => {
-                get_orig_field = Box::new(|fd: &FunctionDiff| fd.old());
+                get_orig_item = Box::new(|fd: &FunctionDiff| fd.old());
                 get_sub_diff = Box::new(|vd: ViewableDiff| vd.old);
             }
         };
@@ -476,7 +476,7 @@ fn collect_impl_diff_changes(
             &impl_range,
             sig_end,
             ids,
-            get_orig_field,
+            get_orig_item,
             get_sub_diff,
         );
         diffs.extend(item_diff_changes);
