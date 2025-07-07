@@ -417,44 +417,8 @@ fn collect_impl_diff_changes(
     let sig_end = impl_.brace_token.span.span().byte_range().start + 1; // we'll take the "{"
     let items_end = end_index_of_items(impl_, source_code);
 
-    let mut i = decl_start;
-    let mut src_i = 0;
-    let mut diffs = Vec::new();
-
-    while i < sig_end {
-        let maybe_diff_index = source_map[src_i..].iter().position(|r| r.contains(&i));
-        match maybe_diff_index {
-            Some(diff_index) => {
-                let diff_range = &source_map[src_i..][diff_index];
-
-                // doesn't make sense that we wouldn't be aligned with the start of a range
-                assert_eq!(i, diff_range.start);
-                let substring = source_code[i..diff_range.end].to_vec();
-                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                diffs.push((Some(change_for_diffs), code));
-
-                src_i = diff_index + 1;
-                i = diff_range.end;
-            }
-            None => {
-                let start = i;
-                while i < sig_end {
-                    let maybe_diff_index = source_map[src_i..].iter().position(|r| r.contains(&i));
-                    if maybe_diff_index.is_some() {
-                        break;
-                    } else {
-                        i += 1
-                    }
-                }
-                // We're either off the end or we've found a new diff. Either way,
-                // start..i contains our next range
-                let substring = source_code[start..i].to_vec();
-                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-
-                diffs.push((maybe_change_for_diffs, code));
-            }
-        }
-    }
+    let mut diff_changes =
+        crate::collect_diff_changes(source_code, source_map, decl_start, sig_end);
 
     if let Some(ids) = items_diff {
         let (get_orig_item, get_sub_diff): (
@@ -479,15 +443,15 @@ fn collect_impl_diff_changes(
             get_orig_item,
             get_sub_diff,
         );
-        diffs.extend(item_diff_changes);
+        diff_changes.extend(item_diff_changes);
     }
 
     // collect remaining whitespace and closing ')' or '}'
     let code = String::from_utf8(source_code[items_end..impl_range.end].to_vec())
         .expect("Off a code boundary");
 
-    diffs.push((maybe_change_for_diffs, Code(code)));
-    diffs
+    diff_changes.push((maybe_change_for_diffs, Code(code)));
+    diff_changes
 }
 
 fn collect_item_diffs(

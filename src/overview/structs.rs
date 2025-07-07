@@ -290,45 +290,8 @@ fn collect_struct_diff_changes(
     let sig_end = end_index_of_signature(struct_);
     let fields_end = end_index_of_fields(struct_);
 
-    let mut i = decl_start;
-    let mut src_i = 0;
-    let mut diff_changes = Vec::new();
-
-    while i < sig_end {
-        let maybe_diff_index = source_map[src_i..].iter().position(|r| r.contains(&i));
-        match maybe_diff_index {
-            Some(diff_index) => {
-                let diff_range = &source_map[src_i..][diff_index];
-
-                // doesn't make sense that we wouldn't be aligned with the start of a range
-                assert_eq!(i, diff_range.start);
-                let substring = source_code[i..diff_range.end].to_vec();
-                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-
-                diff_changes.push((Some(ex), code));
-
-                src_i = diff_index + 1;
-                i = diff_range.end;
-            }
-            None => {
-                let start = i;
-                while i < sig_end {
-                    let maybe_diff_index = source_map[src_i..].iter().position(|r| r.contains(&i));
-                    if maybe_diff_index.is_some() {
-                        break;
-                    } else {
-                        i += 1
-                    }
-                }
-                // We're either off the end or we've found a new diff. Either way,
-                // start..i contains our next range
-                let substring = source_code[start..i].to_vec();
-                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-
-                diff_changes.push((None, code));
-            }
-        }
-    }
+    let mut diff_changes =
+        crate::collect_diff_changes(source_code, source_map, decl_start, sig_end);
 
     if let Some(field_diffs) = field_diffs {
         let (get_orig_field, get_sub_diff): (

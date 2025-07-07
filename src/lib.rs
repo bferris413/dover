@@ -922,3 +922,52 @@ macro_rules! collect_src_maps {
         (old_src_map, new_src_map)
     }};
 }
+
+fn collect_diff_changes(
+    source_code: &[u8],
+    source_map: &[Range<usize>],
+    decl_start: usize,
+    sig_end: usize,
+) -> Vec<(Option<ExistenceChange>, Code)> {
+    let mut i = decl_start;
+    let mut src_i = 0;
+    let mut diff_changes = Vec::new();
+
+    while i < sig_end {
+        let maybe_diff_index = source_map[src_i..].iter().position(|r| r.contains(&i));
+        match maybe_diff_index {
+            Some(diff_index) => {
+                let diff_range = &source_map[src_i..][diff_index];
+
+                // doesn't make sense that we wouldn't be aligned with the start of a range
+                assert_eq!(i, diff_range.start);
+                let substring = source_code[i..diff_range.end].to_vec();
+                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+
+                diff_changes.push((Some(ex), code));
+
+                src_i = diff_index + 1;
+                i = diff_range.end;
+            }
+            None => {
+                let start = i;
+                while i < sig_end {
+                    let maybe_diff_index = source_map[src_i..].iter().position(|r| r.contains(&i));
+                    if maybe_diff_index.is_some() {
+                        break;
+                    } else {
+                        i += 1
+                    }
+                }
+                // We're either off the end or we've found a new diff. Either way,
+                // start..i contains our next range
+                let substring = source_code[start..i].to_vec();
+                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
+
+                diff_changes.push((None, code));
+            }
+        }
+    }
+
+    diff_changes
+}
