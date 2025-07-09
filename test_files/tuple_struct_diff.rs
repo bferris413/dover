@@ -1,5 +1,5 @@
-use cake::cheese::eggs;
-use rice;
+// use cake::cheese::eggs;
+// use rice;
 
 // const unsafe fn run(
 //     more: StringsWithNumbersAndStuff,
@@ -11,74 +11,90 @@ use rice;
 //     i
 // }
 
-fn build(x: String) -> u32 {
-    todo!()
-}
+// fn build(x: String) -> u32 {
+//     todo!()
+// }
 
-fn cake() {}
+// fn cake() {}
 // fn doit() {
 //     println!("yes");
 // }
 //
-// pub struct Struct1(String);
 
 // const unsafe fn run(i: u32) -> std::u32::u32 {
 //     i
 // }
 
 // struct Struct2;
-struct Struct {
-    field1: u32,
-    field2: String,
-}
-impl Struct {
-    fn new(field1: u32, field2: String) -> Self {
-        Self { field1, field2 }
-    }
+// impl Struct {
+//     fn new(field1: u32, field2: String) -> Self {
+//         Self { field1, field2 }
+//     }
 
-    fn milk(&self) -> Rice {
-        println!("run");
-    }
-}
+//     fn milk(&self) -> Rice {
+//         println!("run");
+//     }
+// }
 
-impl SanityCheck {
-    pub fn sanity_check(&self) -> DoThing {
-        println!("hello");
-    }
-}
+// impl SanityCheck {
+//     pub fn sanity_check(&self) -> DoThing {
+//         println!("hello");
+//     }
+// }
 
-impl View for SanityCheck {
-    fn run(&self) -> Rice {
-        Rice::new(eggs)
-    }
-}
-//struct Struct3;
+// impl View for SanityCheck {
+//     fn run(&self) -> Rice {
+//         Rice::new(eggs)
+//     }
+// }
 
-trait Milkshake {
-    fn cheese<T>(&mut self) -> eggs::Cheese;
-}
-
-trait Rice {}
+// trait Milkshake {
+//     fn cheese<T>(&mut self) -> eggs::Cheese;
+// }
 
 // trait Rice {}
 
-enum L7Protocol {
-    Https { t: T },
-    Dns,
-    Smtp,
-}
+// trait Rice {}
 
-enum Person {
-    Idea,
-}
+// enum L7Protocol {
+//     Https { t: T },
+//     Dns,
+//     Smtp,
+// }
 
-enum Buddy {
-    Friend,
-    Pal,
-    Human,
-}
+// enum Person {
+//     Idea,
+// }
+
+// enum Buddy {
+//     Friend,
+//     Pal,
+//     Human,
+// }
+
+// pub struct Struct1(String);
+// struct Struct3;
+
+// struct Struct {
+//     field1: u32,
+//     field2: String,
+// }
 
 // struct Thing<T, U>(T, U)
 // where
 //     U: Cake,
 //     T: Eggs;
+
+enum EnumAdded {
+    Variant1,
+    Variant2,
+    Variant3,
+}
+// struct FieldAddedTuple(u8, u16, u32);
+
+struct FieldAddedNormal {
+    f1: u16,
+    f2: u32,
+    f3: u64,
+    a1: String,
+}

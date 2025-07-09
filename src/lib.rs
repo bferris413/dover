@@ -928,6 +928,7 @@ fn collect_diff_changes(
     source_map: &[Range<usize>],
     decl_start: usize,
     sig_end: usize,
+    ex: ExistenceChange,
 ) -> Vec<(Option<ExistenceChange>, Code)> {
     let mut i = decl_start;
     let mut src_i = 0;
@@ -970,4 +971,42 @@ fn collect_diff_changes(
     }
 
     diff_changes
+}
+
+// Returns a formatted string to indicate that the full struct isn't being displayed.
+fn collect_elided_whitespace(sig_end: usize, source_code: &[u8], item_range_end: usize) -> String {
+    let mut fields_start = sig_end;
+    while source_code[fields_start].is_ascii_whitespace() && fields_start < item_range_end {
+        fields_start += 1;
+    }
+
+    let whitespace = String::from_utf8_lossy(&source_code[sig_end..fields_start]);
+    format!("{whitespace}..")
+}
+
+fn collect_preceding_whitespace(source_code: &[u8], item_start_index: usize) -> String {
+    let mut item_diff_whitespace_start = item_start_index as isize - 1;
+
+    while item_diff_whitespace_start > 0 {
+        if source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
+            if source_code[item_diff_whitespace_start as usize] == ASCII_LINE_FEED {
+                break;
+            } else {
+                item_diff_whitespace_start -= 1;
+            }
+        } else {
+            break;
+        }
+    }
+
+    // TODO: this omits commas between fields (applies to variants and traits, too)
+    if !source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
+        // we hit a non-whitespace character which shouldn't be included in our output
+        item_diff_whitespace_start += 1;
+    }
+
+    let whitespace_bytes =
+        source_code[item_diff_whitespace_start as usize..item_start_index].to_vec();
+
+    String::from_utf8(whitespace_bytes).expect("Off a code boundary")
 }

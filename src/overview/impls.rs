@@ -7,8 +7,8 @@ use syn::{
 };
 
 use crate::{
-    ASCII_LINE_FEED, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
-    ViewableDiff, ViewableDiffs, collect_src_maps,
+    ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
+    collect_src_maps,
     overview::functions::{Function, FunctionDiff, Functions},
 };
 
@@ -417,8 +417,13 @@ fn collect_impl_diff_changes(
     let sig_end = impl_.brace_token.span.span().byte_range().start + 1; // we'll take the "{"
     let items_end = end_index_of_items(impl_, source_code);
 
-    let mut diff_changes =
-        crate::collect_diff_changes(source_code, source_map, decl_start, sig_end);
+    let mut diff_changes = crate::collect_diff_changes(
+        source_code,
+        source_map,
+        decl_start,
+        sig_end,
+        change_for_diffs,
+    );
 
     if let Some(ids) = items_diff {
         let (get_orig_item, get_sub_diff): (
@@ -437,7 +442,7 @@ fn collect_impl_diff_changes(
         };
         let item_diff_changes = collect_item_diffs(
             source_code,
-            &impl_range,
+            &impl_,
             sig_end,
             ids,
             get_orig_item,
@@ -457,8 +462,8 @@ fn collect_impl_diff_changes(
 fn collect_item_diffs(
     // The full source code for the file we're parsing
     source_code: &[u8],
-    // The byte range in the source code of the impl we're parsing
-    impl_range: &Range<usize>,
+    // The impl we're parsing
+    impl_: &ItemImpl,
     // The index at which the signature ends
     sig_end: usize,
     // The item diffs for the file we're parsing
@@ -470,6 +475,13 @@ fn collect_item_diffs(
 ) -> Vec<(Option<ExistenceChange>, Code)> {
     let mut i = sig_end;
     let mut diffs = Vec::new();
+    let impl_range = impl_.span().byte_range();
+
+    if impl_.items.len() > ids.len() {
+        let elided_whitespace =
+            crate::collect_elided_whitespace(sig_end, source_code, impl_range.end);
+        diffs.push((None, Code(elided_whitespace)));
+    }
 
     while i < impl_range.end {
         let maybe_item_diff = ids.fns_diff.diffs().iter().find(|d| {
@@ -490,29 +502,8 @@ fn collect_item_diffs(
                 let item_diff_start = item_diff_range.start;
                 let item_diff_end = item_diff_range.end;
 
-                let mut item_diff_whitespace_start = item_diff_start as isize - 1;
-                while item_diff_whitespace_start > 0 {
-                    if source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
-                        if source_code[item_diff_whitespace_start as usize] == ASCII_LINE_FEED {
-                            break;
-                        } else {
-                            item_diff_whitespace_start -= 1;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                if !source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
-                    // we hit a non-whitespace character which shouldn't be included in our output
-                    item_diff_whitespace_start += 1;
-                }
-
-                let substring =
-                    source_code[item_diff_whitespace_start as usize..item_diff_start].to_vec();
-                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-
-                diffs.push((None, code));
+                let whitespace = crate::collect_preceding_whitespace(source_code, item_diff_start);
+                diffs.push((None, Code(whitespace)));
 
                 // then get the actual diff
                 let viewable = id.as_viewable();

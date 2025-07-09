@@ -6,8 +6,8 @@ use std::{
 use syn::{ItemEnum, Visibility, spanned::Spanned};
 
 use crate::{
-    ASCII_LINE_FEED, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
-    ViewableDiff, ViewableDiffs, VisDiff, collect_src_maps,
+    ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
+    VisDiff, collect_src_maps,
     overview::variants::{Variant, VariantDiff},
 };
 
@@ -295,7 +295,7 @@ fn collect_enum_diff_changes(
     let fields_end = end_index_of_variants(enum_, source_code);
 
     let mut diff_changes =
-        crate::collect_diff_changes(source_code, source_map, decl_start, sig_end);
+        crate::collect_diff_changes(source_code, source_map, decl_start, sig_end, ex);
 
     if let Some(variant_diffs) = variant_diffs {
         let (get_orig_field, get_sub_diff): (
@@ -314,7 +314,7 @@ fn collect_enum_diff_changes(
         };
         let diffs_as_changes = collect_variant_diffs(
             source_code,
-            &source_range,
+            &enum_,
             sig_end,
             variant_diffs,
             get_orig_field,
@@ -335,8 +335,8 @@ fn collect_enum_diff_changes(
 fn collect_variant_diffs(
     // The full source code for the file we're parsing
     source_code: &[u8],
-    // The byte range in the source code of the enum we're parsing
-    enum_range: &Range<usize>,
+    // The enum we're parsing
+    enum_: &ItemEnum,
     // The index at which the signature ends
     sig_end: usize,
     // The variant diffs for the file we're parsing
@@ -348,6 +348,13 @@ fn collect_variant_diffs(
 ) -> Vec<(Option<ExistenceChange>, Code)> {
     let mut diffs = Vec::new();
     let mut i = sig_end;
+    let enum_range = enum_.span().byte_range();
+
+    if enum_.variants.len() > vds.len() {
+        let elided_whitespace =
+            crate::collect_elided_whitespace(sig_end, source_code, enum_range.end);
+        diffs.push((None, Code(elided_whitespace)));
+    }
 
     while i < enum_range.end {
         let maybe_item_diff = vds.diffs().iter().find(|d| {
@@ -368,30 +375,8 @@ fn collect_variant_diffs(
                 let item_diff_start = item_diff_range.start;
                 let item_diff_end = item_diff_range.end;
 
-                let mut item_diff_whitespace_start = item_diff_start as isize - 1;
-
-                while item_diff_whitespace_start > 0 {
-                    if source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
-                        if source_code[item_diff_whitespace_start as usize] == ASCII_LINE_FEED {
-                            break;
-                        } else {
-                            item_diff_whitespace_start -= 1;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                if !source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
-                    // we hit a non-whitespace character which shouldn't be included in our output
-                    item_diff_whitespace_start += 1;
-                }
-
-                let substring =
-                    source_code[item_diff_whitespace_start as usize..item_diff_start].to_vec();
-                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-
-                diffs.push((None, code));
+                let whitespace = crate::collect_preceding_whitespace(source_code, item_diff_start);
+                diffs.push((None, Code(whitespace)));
 
                 // then get the actual diff
                 let viewable = id.as_viewable();

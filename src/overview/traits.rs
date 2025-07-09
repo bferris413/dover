@@ -10,8 +10,8 @@ use super::{
     generics::{Generics, GenericsDiff},
 };
 use crate::{
-    ASCII_LINE_FEED, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View,
-    ViewableDiff, ViewableDiffs, VisDiff, collect_src_maps, get_source,
+    ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
+    VisDiff, collect_src_maps, get_source,
     overview::functions::{Function, FunctionDiff},
 };
 
@@ -358,7 +358,7 @@ fn collect_trait_diff_changes(
     let items_end = end_index_of_items(trait_, source_code);
 
     let mut diff_changes =
-        crate::collect_diff_changes(source_code, source_map, decl_start, sig_end);
+        crate::collect_diff_changes(source_code, source_map, decl_start, sig_end, ex);
 
     if let Some(item_diffs) = item_diffs {
         let (get_orig_item, get_sub_diff): (
@@ -377,7 +377,7 @@ fn collect_trait_diff_changes(
         };
         let diffs_as_changes = collect_item_diff_changes(
             source_code,
-            &source_range,
+            &trait_,
             sig_end,
             item_diffs,
             get_orig_item,
@@ -398,8 +398,8 @@ fn collect_trait_diff_changes(
 fn collect_item_diff_changes(
     // The full source code for the file we're parsing
     source_code: &[u8],
-    // The byte range in the source code of the trait we're parsing
-    trait_range: &Range<usize>,
+    // The trait we're parsing
+    trait_: &ItemTrait,
     // The index at which the signature ends
     sig_end: usize,
     // The field diffs for the file we're parsing
@@ -411,6 +411,13 @@ fn collect_item_diff_changes(
 ) -> Vec<(Option<ExistenceChange>, Code)> {
     let mut diffs = Vec::new();
     let mut i = sig_end;
+    let trait_range = trait_.span().byte_range();
+
+    if trait_.items.len() > tids.len() {
+        let elided_whitespace =
+            crate::collect_elided_whitespace(sig_end, source_code, trait_range.end);
+        diffs.push((None, Code(elided_whitespace)));
+    }
 
     while i < trait_range.end {
         let maybe_item_diff = tids.diffs().iter().find(|d| {
@@ -431,31 +438,8 @@ fn collect_item_diff_changes(
                 let item_diff_start = item_diff_range.start;
                 let item_diff_end = item_diff_range.end;
 
-                let mut item_diff_whitespace_start = item_diff_start as isize - 1;
-
-                while item_diff_whitespace_start > 0 {
-                    if source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
-                        if source_code[item_diff_whitespace_start as usize] == ASCII_LINE_FEED {
-                            break;
-                        } else {
-                            item_diff_whitespace_start -= 1;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                // TODO: this omits commas between fields (applies to variants and traits, too)
-                if !source_code[item_diff_whitespace_start as usize].is_ascii_whitespace() {
-                    // we hit a non-whitespace character which shouldn't be included in our output
-                    item_diff_whitespace_start += 1;
-                }
-
-                let substring =
-                    source_code[item_diff_whitespace_start as usize..item_diff_start].to_vec();
-                let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-
-                diffs.push((None, code));
+                let whitespace = crate::collect_preceding_whitespace(source_code, item_diff_start);
+                diffs.push((None, Code(whitespace)));
 
                 // then get the actual diff
                 let viewable = id.as_viewable();
@@ -499,6 +483,9 @@ pub struct TraitItemsDiff {
 impl TraitItemsDiff {
     pub fn diffs(&self) -> &[FunctionDiff] {
         &self.fns_diff.diffs()
+    }
+    pub fn len(&self) -> usize {
+        self.fns_diff.diffs().len()
     }
 }
 impl ByteRange for TraitItemsDiff {

@@ -1,8 +1,11 @@
 use std::ops::Range;
 
-use syn::{spanned::Spanned, Variant as SynVariant};
+use syn::{Variant as SynVariant, spanned::Spanned};
 
-use crate::{collect_src_maps, ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs};
+use crate::{
+    ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
+    collect_src_maps,
+};
 
 use super::fields::{Fields, FieldsDiff};
 
@@ -13,7 +16,10 @@ pub struct Variants(Vec<Variant>);
 impl Variants {
     pub(crate) fn new(mut syn_vars: Vec<SynVariant>, source: SourceFile) -> Self {
         syn_vars.sort_by(|v1, v2| v1.ident.cmp(&v2.ident));
-        let variants = syn_vars.into_iter().map(|v| Variant::new(v, source.clone())).collect();
+        let variants = syn_vars
+            .into_iter()
+            .map(|v| Variant::new(v, source.clone()))
+            .collect();
         Variants(variants)
     }
 }
@@ -21,14 +27,24 @@ impl Variants {
 impl Diff for Variants {
     type Diff = Option<VariantDiffs>;
     fn diff_with(&self, other: &Self) -> Self::Diff {
-        debug_assert!(self.0.is_sorted_by(|v1, v2| v1.original.ident <= v2.original.ident));
-        debug_assert!(other.0.is_sorted_by(|v1, v2| v1.original.ident <= v2.original.ident));
+        debug_assert!(
+            self.0
+                .is_sorted_by(|v1, v2| v1.original.ident <= v2.original.ident)
+        );
+        debug_assert!(
+            other
+                .0
+                .is_sorted_by(|v1, v2| v1.original.ident <= v2.original.ident)
+        );
 
         let mut variant_diffs = Vec::new();
 
         // file1
         for variant in &self.0 {
-            match other.0.binary_search_by(|s| s.original.ident.cmp(&variant.original.ident)) {
+            match other
+                .0
+                .binary_search_by(|s| s.original.ident.cmp(&variant.original.ident))
+            {
                 Ok(s) => {
                     if let Some(diff) = variant.diff_with(&other.0[s]) {
                         variant_diffs.push(diff);
@@ -50,7 +66,10 @@ impl Diff for Variants {
         // file2
         // Everything here is either new or already accounted for
         for variant in &other.0 {
-            if let Err(_e) = self.0.binary_search_by(|s| s.original.ident.cmp(&variant.original.ident)) {
+            if let Err(_e) = self
+                .0
+                .binary_search_by(|s| s.original.ident.cmp(&variant.original.ident))
+            {
                 let sdiff = VariantDiff {
                     change: Change::Existence(ExistenceChange::Added),
                     new: Some(variant.clone()),
@@ -80,7 +99,7 @@ impl Variant {
     fn new(v: SynVariant, source: SourceFile) -> Self {
         Self {
             source,
-            original: v
+            original: v,
         }
     }
     pub fn original(&self) -> &SynVariant {
@@ -95,6 +114,9 @@ pub struct VariantDiffs {
 impl VariantDiffs {
     pub fn diffs(&self) -> &[VariantDiff] {
         &self.diffs
+    }
+    pub fn len(&self) -> usize {
+        self.diffs.len()
     }
 }
 impl View for VariantDiffs {
@@ -175,7 +197,7 @@ impl Diff for Variant {
                 old_src: Some(self.source.clone()),
                 new_src: Some(other.source.clone()),
                 old_src_map: old_src_map,
-                new_src_map: new_src_map
+                new_src_map: new_src_map,
             })
         }
     }
@@ -219,17 +241,16 @@ impl View for VariantDiff {
                     return ViewableDiffs::new(vec![ViewableDiff {
                         old: Some(change),
                         new: None,
-                    }])
+                    }]);
                 }
                 ExistenceChange::Added => {
                     return ViewableDiffs::new(vec![ViewableDiff {
                         old: None,
                         new: Some(change),
-                    }])
+                    }]);
                 }
             };
         }
-
 
         let old = self.old.as_ref().unwrap();
         let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
