@@ -16,17 +16,19 @@
 - attributes - module
 - From<ImplItemFn> for Function - tricky, we're lossy converting ImplItemFn to ItemFn
 - From<TraitItemFn> for Function - tricky, we're lossy converting TraitItemFn to ItemFn
-- remove irrelevant details from structs
-- remove irrelevant details from traits
 - introduce .toml config for user config output
 - associate impl blocks with their respective enum/struct if within same file
-- "collection" diffs need an ellipsis or something to indicate some irrelevant output was omitted
-- "collection" diffs include whitespace from the original, but we need to collapse it in some instances
 
 -- BUG --------------------------------------------------------------------------
 - struct fields assume order matters, but this is only relevant for tuple structs
 
 -- DONE ------------------------------------------------------------------------
+- remove irrelevant details from structs
+- remove irrelevant details from traits
+- remove irrelevant details from enums
+- remove irrelevant details from impls
+- done - "collection" diffs need an ellipsis or something to indicate some irrelevant output was omitted
+- done - "collection" diffs include whitespace from the original, but we need to collapse it in some instances
 - done - remove irrelevant details from impls (like unmodified functions)
 - done - remove irrelevant details from enums
 - done - remove { .. } from Function impl items

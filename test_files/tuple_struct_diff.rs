@@ -86,15 +86,15 @@
 //     T: Eggs;
 
 enum EnumAdded {
+    Variant3,
     Variant1,
     Variant2,
-    Variant3,
 }
 // struct FieldAddedTuple(u8, u16, u32);
 
 struct FieldAddedNormal {
+    a1: String,
     f1: u16,
     f2: u32,
     f3: u64,
-    a1: String,
 }

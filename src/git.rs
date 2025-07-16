@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use git2::{Delta, Oid, Repository};
 use std::{fmt::Display, fs, path::PathBuf};
 
@@ -49,7 +49,7 @@ impl Treeish {
     }
 }
 
-pub struct RepoChangedFiles{
+pub struct RepoChangedFiles {
     pub changed_files: Vec<ChangedFile>,
     pub repo_workdir: PathBuf,
 }
@@ -63,7 +63,6 @@ pub fn get_changed_files(
     let Some(repo_path) = repo.workdir() else {
         bail!("Couldn't get workdir from {}", repo_path.display());
     };
-
 
     let diff = match trees_to_diff {
         // emulates `git diff`
@@ -115,6 +114,8 @@ pub fn get_changed_files(
     //     .diff_tree_to_index(Some(&tree), Some(&index), None)
     //     .context("Failed to get diff from tree to index")?;
 
+    // This is fundamentally broken since it doesn't account for differences between
+    // workdir changes and stuff in the index or an old commit
     let mut changed_files = Vec::new();
     diff.foreach(
         &mut |delta, _| {
@@ -225,7 +226,10 @@ pub fn get_changed_files(
     )
     .context("Failed to iterate over diff")?;
 
-    let repo_files = RepoChangedFiles { changed_files, repo_workdir: repo_path.to_path_buf() };
+    let repo_files = RepoChangedFiles {
+        changed_files,
+        repo_workdir: repo_path.to_path_buf(),
+    };
     Ok(repo_files)
 }
 
