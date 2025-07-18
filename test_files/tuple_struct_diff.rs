@@ -90,6 +90,11 @@ enum EnumAdded {
     Variant1,
     Variant2,
 }
+
+enum VariantDiff {
+    Variant2,
+    Variant1 { field1: u32, field2: String },
+}
 // struct FieldAddedTuple(u8, u16, u32);
 
 struct FieldAddedNormal {

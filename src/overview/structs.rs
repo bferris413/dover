@@ -103,7 +103,7 @@ impl Struct {
         let original = s.clone();
         let vis = s.vis;
         let name = s.ident.to_string();
-        let fields = s.fields.into_iter().collect();
+        let fields = s.fields.clone();
         let fields = Fields(fields);
         let generics = Generics::from(s.generics.clone());
 
@@ -294,6 +294,7 @@ fn collect_struct_diff_changes(
         crate::collect_diff_changes(source_code, source_map, decl_start, sig_end, ex);
 
     if let Some(field_diffs) = field_diffs {
+        println!("I'm collecting field diffs for {} ({ex})", struct_.ident);
         let (get_orig_field, get_sub_diff): (
             Box<dyn Fn(&FieldDiff) -> Option<&syn::Field>>,
             Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
@@ -316,7 +317,10 @@ fn collect_struct_diff_changes(
             get_orig_field,
             get_sub_diff,
         );
+        println!("received {} changes", diffs_as_changes.len());
         diff_changes.extend(diffs_as_changes);
+    } else {
+        println!("I don't have field diffs for {}", struct_.ident);
     }
 
     // collect remaining whitespace and closing ')' or '}'
@@ -345,6 +349,11 @@ fn collect_field_diffs(
     let mut diffs = Vec::new();
     let mut i = sig_end;
     let struct_range = struct_.span().byte_range();
+    println!(
+        "Collecting field diffs for struct {} ({} diffs)",
+        struct_.ident,
+        fds.len()
+    );
 
     if struct_.fields.len() > fds.len() {
         let elided_whitespace =
@@ -383,6 +392,14 @@ fn collect_field_diffs(
                 i += 1;
             }
         }
+    }
+
+    // It's possible we don't have any diffs and yet the struct has fields.
+    // In this case, we should add some visual cue to indicate we elided irrelevant fields.
+    if diffs.is_empty() && struct_.fields.len() != 0 {
+        let elided_whitespace =
+            crate::collect_elided_whitespace(sig_end, source_code, struct_range.end);
+        diffs.push((None, Code(elided_whitespace)));
     }
 
     diffs

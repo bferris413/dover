@@ -7,46 +7,119 @@ use syn::{FieldMutability, Type, spanned::Spanned};
 const NO_SRC_ERROR: &str = "No source text for field, was parse logic changed?";
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Fields(pub Vec<syn::Field>);
+pub struct Fields(pub syn::Fields);
 impl Diff for Fields {
     type Diff = Option<FieldsDiff>;
 
     fn diff_with(&self, other: &Self) -> Self::Diff {
+        use syn::Fields::*;
+
         if self == other {
             return None;
         }
 
-        let mut i = 0;
-        let mut diffs = Vec::with_capacity(usize::max(self.0.len(), other.0.len()));
-        loop {
-            match (self.0.get(i), other.0.get(i)) {
-                (Some(f1), Some(f2)) => {
-                    if let Some(diff) = f1.diff_with(f2) {
-                        diffs.push(diff);
+        match (&self.0, &other.0) {
+            (Named(old_named), Named(new_named)) => {
+                // field structs, order doesn't matter
+                let mut old_named = old_named.named.iter().collect::<Vec<_>>();
+                let mut new_named = new_named.named.iter().collect::<Vec<_>>();
+
+                old_named.sort_by(|f1, f2| f1.ident.cmp(&f2.ident));
+                new_named.sort_by(|f1, f2| f1.ident.cmp(&f2.ident));
+
+                let mut field_diffs = Vec::new();
+
+                for field in &old_named {
+                    match new_named.binary_search_by(|new_f| {
+                        new_f
+                            .ident
+                            .as_ref()
+                            .unwrap()
+                            .cmp(field.ident.as_ref().unwrap())
+                    }) {
+                        Ok(new_field_i) => {
+                            if let Some(diff) = field.diff_with(&new_named[new_field_i]) {
+                                field_diffs.push(diff);
+                            }
+                        }
+
+                        Err(_e) => {
+                            // field was deleted
+                            let fdiff = FieldDiff {
+                                old: Some((*field).clone()),
+                                new: None,
+                                change: Change::Existence(ExistenceChange::Deleted),
+                            };
+                            field_diffs.push(fdiff);
+                        }
                     }
                 }
-                (Some(f1), None) => {
-                    diffs.push(FieldDiff {
-                        old: Some(f1.clone()),
-                        new: None,
-                        change: Change::Existence(ExistenceChange::Deleted),
-                    });
+
+                // Everything here is either new or already accounted for
+                for field_ in &new_named {
+                    if let Err(_e) = old_named.binary_search_by(|f| {
+                        f.ident
+                            .as_ref()
+                            .unwrap()
+                            .cmp(&field_.ident.as_ref().unwrap())
+                    }) {
+                        let fdiff = FieldDiff {
+                            old: None,
+                            new: Some((*field_).clone()),
+                            change: Change::Existence(ExistenceChange::Added),
+                        };
+                        field_diffs.push(fdiff);
+                    }
                 }
-                (None, Some(f2)) => {
-                    diffs.push(FieldDiff {
-                        new: Some(f2.clone()),
-                        old: None,
-                        change: Change::Existence(ExistenceChange::Added),
-                    });
-                }
-                (None, None) => break,
+
+                Some(FieldsDiff { diffs: field_diffs })
             }
+            (Named(old_named), Unnamed(new_unnamed)) => todo!(),
+            (Named(old_named), Unit) => todo!(),
+            (Unnamed(old_unnamed), Named(new_named)) => todo!(),
+            (Unnamed(old_unnamed), Unnamed(new_unnamed)) => {
+                // tuple structs, order matters
 
-            i += 1;
+                let old_unnamed = old_unnamed.unnamed.iter().collect::<Vec<_>>();
+                let new_unnamed = new_unnamed.unnamed.iter().collect::<Vec<_>>();
+
+                let mut i = 0;
+                let mut diffs = Vec::with_capacity(usize::max(self.0.len(), other.0.len()));
+                loop {
+                    match (old_unnamed.get(i), new_unnamed.get(i)) {
+                        (Some(f1), Some(f2)) => {
+                            if let Some(diff) = f1.diff_with(f2) {
+                                diffs.push(diff);
+                            }
+                        }
+                        (Some(f1), None) => {
+                            diffs.push(FieldDiff {
+                                old: Some((*f1).clone()),
+                                new: None,
+                                change: Change::Existence(ExistenceChange::Deleted),
+                            });
+                        }
+                        (None, Some(f2)) => {
+                            diffs.push(FieldDiff {
+                                old: None,
+                                new: Some((*f2).clone()),
+                                change: Change::Existence(ExistenceChange::Added),
+                            });
+                        }
+                        (None, None) => break,
+                    }
+
+                    i += 1;
+                }
+
+                let fields_diff = FieldsDiff { diffs };
+                Some(fields_diff)
+            }
+            (Unnamed(old_unnamed), Unit) => todo!(),
+            (Unit, Named(old_named)) => todo!(),
+            (Unit, Unnamed(old_unnamed)) => todo!(),
+            (Unit, Unit) => unreachable!(),
         }
-
-        let fields_diff = FieldsDiff { diffs };
-        Some(fields_diff)
     }
 }
 

@@ -177,8 +177,8 @@ impl Diff for Variant {
             return None;
         }
 
-        let self_fields = Fields(self.original.fields.clone().into_iter().collect());
-        let other_fields = Fields(other.original.fields.clone().into_iter().collect());
+        let self_fields = Fields(self.original.fields.clone());
+        let other_fields = Fields(other.original.fields.clone());
         let fields_diff = self_fields.diff_with(&other_fields);
 
         let change = Change::Modified;
