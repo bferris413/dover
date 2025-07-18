@@ -18,13 +18,14 @@
 - From<TraitItemFn> for Function - tricky, we're lossy converting TraitItemFn to ItemFn
 - introduce .toml config for user config output
 - associate impl blocks with their respective enum/struct if within same file
-- enum variants don't elide whitespace/irrelevant members like other 'container' types
 - Code should be escaped before returning HTML output
+- HTML output doesn't do spacing between members correctly (should mimic stdout)
 - We need to pull files from git instead of the filesystem, I think this existed previously but got obliterated somehow.
 
 -- BUG --------------------------------------------------------------------------
 
 -- DONE ------------------------------------------------------------------------
+- done - enum variants don't elide whitespace/irrelevant members like other 'container' types
 - done - struct fields assume order matters, but this is only relevant for tuple structs
 - done - remove irrelevant details from structs
 - done - remove irrelevant details from traits

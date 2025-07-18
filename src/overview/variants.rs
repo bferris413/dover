@@ -4,7 +4,7 @@ use syn::{Variant as SynVariant, spanned::Spanned};
 
 use crate::{
     ByteRange, Change, Code, Diff, ExistenceChange, SourceFile, View, ViewableDiff, ViewableDiffs,
-    collect_src_maps,
+    collect_src_maps, overview::fields::FieldDiff,
 };
 
 use super::fields::{Fields, FieldsDiff};
@@ -228,127 +228,24 @@ impl VariantDiff {
 impl View for VariantDiff {
     fn as_viewable(&self) -> crate::ViewableDiffs {
         if let Change::Existence(ex) = self.change {
-            let v = match (&self.old, &self.new) {
-                (Some(_), Some(_)) => panic!("old and new variants were both Some"),
-                (None, None) => panic!("old and new variants were both None"),
-                (Some(i), None) | (None, Some(i)) => i,
-            };
-
-            let source = v.original.span().source_text().expect(NO_SRC_ERROR);
-            let change = vec![(Some(ex), Code(format!("{source}")))];
-            match ex {
-                ExistenceChange::Deleted => {
-                    return ViewableDiffs::new(vec![ViewableDiff {
-                        old: Some(change),
-                        new: None,
-                    }]);
-                }
-                ExistenceChange::Added => {
-                    return ViewableDiffs::new(vec![ViewableDiff {
-                        old: None,
-                        new: Some(change),
-                    }]);
-                }
-            };
+            return collect_existence_diff_changes(&self.old, &self.new, ex);
         }
 
-        let old = self.old.as_ref().unwrap();
-        let old_src = &self.old_src.as_ref().unwrap().0.as_bytes();
+        let old_diff = collect_variant_diff_changes(
+            self.old.as_ref().unwrap(),
+            &self.old_src.as_ref().unwrap().0.as_bytes(),
+            &self.old_src_map,
+            &self.fields_diff,
+            ExistenceChange::Deleted,
+        );
 
-        let old_range = old.original.span().byte_range();
-        let decl_start = old_range.start;
-        let decl_end = old_range.end;
-
-        let mut i = decl_start;
-        let mut src_i = 0;
-        let mut old_diff = Vec::new();
-
-        while i < decl_end {
-            let maybe_diff_index = self.old_src_map[src_i..]
-                .iter()
-                .position(|r| r.contains(&i));
-            match maybe_diff_index {
-                Some(diff_index) => {
-                    let diff_range = &self.old_src_map[src_i..][diff_index];
-
-                    // doesn't make sense that we wouldn't be aligned with the start of a range
-                    assert_eq!(i, diff_range.start);
-                    let substring = old_src[i..diff_range.end].to_vec();
-                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                    old_diff.push((Some(ExistenceChange::Deleted), code));
-
-                    src_i = diff_index + 1;
-                    i = diff_range.end;
-                }
-                None => {
-                    let start = i;
-                    while i < decl_end {
-                        let maybe_diff_index = self.old_src_map[src_i..]
-                            .iter()
-                            .position(|r| r.contains(&i));
-                        if maybe_diff_index.is_some() {
-                            break;
-                        } else {
-                            i += 1
-                        }
-                    }
-                    // We're either off the end or we've found a new diff. Either way,
-                    // start..i contains our next range
-                    let substring = old_src[start..i].to_vec();
-                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                    old_diff.push((None, code));
-                }
-            }
-        }
-
-        let new = self.new.as_ref().unwrap();
-        let new_src = &self.new_src.as_ref().unwrap().0.as_bytes();
-
-        let new_range = new.original.span().byte_range();
-        let decl_start = new_range.start;
-        let decl_end = new_range.end;
-
-        let mut i = decl_start;
-        let mut src_i = 0;
-        let mut new_diff = Vec::new();
-
-        while i < decl_end {
-            let maybe_diff_index = self.new_src_map[src_i..]
-                .iter()
-                .position(|r| r.contains(&i));
-            match maybe_diff_index {
-                Some(diff_index) => {
-                    let diff_range = &self.new_src_map[src_i..][diff_index];
-
-                    // doesn't make sense that we wouldn't be aligned with the start of a range
-                    assert_eq!(i, diff_range.start);
-                    let substring = new_src[i..diff_range.end].to_vec();
-                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                    new_diff.push((Some(ExistenceChange::Added), code));
-
-                    src_i = diff_index + 1;
-                    i = diff_range.end;
-                }
-                None => {
-                    let start = i;
-                    while i < decl_end {
-                        let maybe_diff_index = self.new_src_map[src_i..]
-                            .iter()
-                            .position(|r| r.contains(&i));
-                        if maybe_diff_index.is_some() {
-                            break;
-                        } else {
-                            i += 1
-                        }
-                    }
-                    // We're either off the end or we've found a new diff. Either way,
-                    // start..i contains our next range
-                    let substring = new_src[start..i].to_vec();
-                    let code = Code(String::from_utf8(substring).expect("Off a code boundary"));
-                    new_diff.push((None, code));
-                }
-            }
-        }
+        let new_diff = collect_variant_diff_changes(
+            self.new.as_ref().unwrap(),
+            &self.new_src.as_ref().unwrap().0.as_bytes(),
+            &self.new_src_map,
+            &self.fields_diff,
+            ExistenceChange::Added,
+        );
 
         ViewableDiffs::new(vec![ViewableDiff {
             old: Some(old_diff),
@@ -375,5 +272,169 @@ impl ByteRange for VariantDiff {
         } else {
             vec![]
         }
+    }
+}
+
+fn collect_existence_diff_changes(
+    old: &Option<Variant>,
+    new: &Option<Variant>,
+    ex: ExistenceChange,
+) -> ViewableDiffs {
+    let variant_ = match (&old, &new) {
+        (Some(_), Some(_)) => panic!("old and new variants were both Some"),
+        (None, None) => panic!("old and new variants were both None"),
+        (Some(variant_), None) | (None, Some(variant_)) => variant_,
+    };
+
+    let source = variant_.original.span().source_text().expect(NO_SRC_ERROR);
+    let diff_changes = vec![(Some(ex), Code(format!("{source}\n")))];
+
+    match ex {
+        ExistenceChange::Deleted => ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(diff_changes),
+            new: None,
+        }]),
+        ExistenceChange::Added => ViewableDiffs::new(vec![ViewableDiff {
+            old: None,
+            new: Some(diff_changes),
+        }]),
+    }
+}
+
+fn collect_variant_diff_changes(
+    variant: &Variant,
+    source_code: &[u8],
+    source_map: &[Range<usize>],
+    field_diffs: &Option<FieldsDiff>,
+    ex: ExistenceChange,
+) -> Vec<(Option<ExistenceChange>, Code)> {
+    let source_range = variant.original.span().byte_range();
+    let decl_start = source_range.start;
+    let sig_end = end_index_of_signature(variant);
+    let fields_end = end_index_of_fields(variant);
+
+    let mut diff_changes =
+        crate::collect_diff_changes(source_code, source_map, decl_start, sig_end, ex);
+
+    if let Some(field_diffs) = field_diffs {
+        let (get_orig_field, get_sub_diff): (
+            Box<dyn Fn(&FieldDiff) -> Option<&syn::Field>>,
+            Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
+        );
+        match ex {
+            ExistenceChange::Added => {
+                get_orig_field = Box::new(|fd: &FieldDiff| fd.new());
+                get_sub_diff = Box::new(|vd: ViewableDiff| vd.new);
+            }
+            ExistenceChange::Deleted => {
+                get_orig_field = Box::new(|fd: &FieldDiff| fd.old());
+                get_sub_diff = Box::new(|vd: ViewableDiff| vd.old);
+            }
+        };
+        let diffs_as_changes = collect_field_diffs(
+            source_code,
+            variant,
+            sig_end,
+            field_diffs,
+            get_orig_field,
+            get_sub_diff,
+        );
+        diff_changes.extend(diffs_as_changes);
+    }
+
+    // collect remaining whitespace and closing ')' or '}'
+    let code = String::from_utf8(source_code[fields_end..source_range.end].to_vec())
+        .expect("Off a code boundary");
+
+    diff_changes.push((None, Code(code)));
+    diff_changes
+}
+
+/// Converts field diffs into spans of code indicating the changes, if any.
+fn collect_field_diffs(
+    // The full source code for the file we're parsing
+    source_code: &[u8],
+    // The byte range in the source code of the variant we're parsing
+    variant: &Variant,
+    // The index at which the signature ends
+    sig_end: usize,
+    // The field diffs for the file we're parsing
+    fds: &FieldsDiff,
+    // How to get the original syn::Field from a field diff (old or new method)
+    get_original_field: Box<dyn Fn(&FieldDiff) -> Option<&syn::Field>>,
+    // How to get sub diffs from a given viewable diff (old or new field)
+    get_sub_diffs: Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
+) -> Vec<(Option<ExistenceChange>, Code)> {
+    let mut diffs = Vec::new();
+    let mut i = sig_end;
+    let variant_range = variant.original.span().byte_range();
+
+    if variant.original.fields.len() > fds.len() {
+        let elided_whitespace =
+            crate::collect_elided_whitespace(sig_end, source_code, variant_range.end);
+        diffs.push((None, Code(elided_whitespace)));
+    }
+
+    while i < variant_range.end {
+        let maybe_item_diff = fds.diffs().iter().find(|d| {
+            get_original_field(d)
+                .as_ref()
+                .map(|field| field.span().byte_range().contains(&i))
+                .unwrap_or(false)
+        });
+        match maybe_item_diff {
+            Some(id) => {
+                // Going to walk backwards and get all preceding whitespace until a newline or a character
+                let item_diff_range = get_original_field(id).as_ref().unwrap().span().byte_range();
+                let item_diff_start = item_diff_range.start;
+                let item_diff_end = item_diff_range.end;
+
+                let whitespace = crate::collect_preceding_whitespace(source_code, item_diff_start);
+                diffs.push((None, Code(whitespace)));
+
+                // then get the actual diff
+                let viewable = id.as_viewable();
+                for diff in viewable.vds {
+                    if let Some(sub_diff) = get_sub_diffs(diff) {
+                        diffs.extend(sub_diff);
+                    }
+                }
+
+                i = item_diff_end;
+            }
+            None => {
+                i += 1;
+            }
+        }
+    }
+
+    // It's possible we don't have any diffs and yet the variant has fields.
+    // In this case, we should add some visual cue to indicate we elided irrelevant fields.
+    if diffs.is_empty() && variant.original.fields.len() != 0 {
+        let elided_whitespace =
+            crate::collect_elided_whitespace(sig_end, source_code, variant_range.end);
+        diffs.push((None, Code(elided_whitespace)));
+    }
+
+    diffs
+}
+
+fn end_index_of_signature(variant: &Variant) -> usize {
+    match &variant.original.fields {
+        syn::Fields::Named(fields_named) => {
+            fields_named.brace_token.span.span().byte_range().start + 1
+        }
+        syn::Fields::Unnamed(fields_unnamed) => {
+            fields_unnamed.paren_token.span.span().byte_range().start + 1
+        }
+        syn::Fields::Unit => variant.original.span().byte_range().end,
+    }
+}
+
+fn end_index_of_fields(variant: &Variant) -> usize {
+    match &variant.original.fields {
+        syn::Fields::Named(fields_named) => fields_named.named.span().byte_range().end,
+        syn::Fields::Unnamed(fields_unnamed) => fields_unnamed.unnamed.span().byte_range().end,
+        syn::Fields::Unit => variant.original.span().byte_range().end,
     }
 }

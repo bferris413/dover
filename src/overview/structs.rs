@@ -294,7 +294,6 @@ fn collect_struct_diff_changes(
         crate::collect_diff_changes(source_code, source_map, decl_start, sig_end, ex);
 
     if let Some(field_diffs) = field_diffs {
-        println!("I'm collecting field diffs for {} ({ex})", struct_.ident);
         let (get_orig_field, get_sub_diff): (
             Box<dyn Fn(&FieldDiff) -> Option<&syn::Field>>,
             Box<dyn Fn(ViewableDiff) -> Option<Vec<(Option<ExistenceChange>, Code)>>>,
@@ -317,10 +316,7 @@ fn collect_struct_diff_changes(
             get_orig_field,
             get_sub_diff,
         );
-        println!("received {} changes", diffs_as_changes.len());
         diff_changes.extend(diffs_as_changes);
-    } else {
-        println!("I don't have field diffs for {}", struct_.ident);
     }
 
     // collect remaining whitespace and closing ')' or '}'
@@ -349,11 +345,6 @@ fn collect_field_diffs(
     let mut diffs = Vec::new();
     let mut i = sig_end;
     let struct_range = struct_.span().byte_range();
-    println!(
-        "Collecting field diffs for struct {} ({} diffs)",
-        struct_.ident,
-        fds.len()
-    );
 
     if struct_.fields.len() > fds.len() {
         let elided_whitespace =
