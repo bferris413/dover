@@ -86,9 +86,9 @@
 //     T: Eggs;
 
 enum EnumAdded {
-    Variant3,
     Variant1,
     Variant2,
+    Variant3,
 }
 
 enum VariantDiff {

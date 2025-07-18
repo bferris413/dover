@@ -108,8 +108,11 @@ impl Html for ViewableDiffs {
                         Some(ExistenceChange::Added) => unreachable!(),
                         None => "",
                     };
-                    deleted_content
-                        .push_str(&format!("<span class=\"{}\">{}</span>", class, diff.1));
+                    deleted_content.push_str(&format!(
+                        "<span class=\"{}\">{}</span>",
+                        class,
+                        escape_html(&diff.1.to_string())
+                    ));
                 }
             }
             if deleted_content.is_empty() {
@@ -117,9 +120,9 @@ impl Html for ViewableDiffs {
                 html.push_str("</td>");
             } else {
                 html.push_str("<td>");
-                html.push_str("<pre>");
+                html.push_str("<pre><code>");
                 html.push_str(&deleted_content);
-                html.push_str("</pre>");
+                html.push_str("</code></pre>");
                 html.push_str("</td>");
             }
 
@@ -132,7 +135,11 @@ impl Html for ViewableDiffs {
                         Some(ExistenceChange::Added) => "added",
                         None => "",
                     };
-                    added_content.push_str(&format!("<span class=\"{}\">{}</span>", class, diff.1));
+                    added_content.push_str(&format!(
+                        "<span class=\"{}\">{}</span>",
+                        class,
+                        escape_html(&diff.1.to_string())
+                    ));
                 }
             }
             if added_content.is_empty() {
@@ -140,9 +147,9 @@ impl Html for ViewableDiffs {
                 html.push_str("</td>");
             } else {
                 html.push_str("<td>");
-                html.push_str("<pre>");
+                html.push_str("<pre><code>");
                 html.push_str(&added_content);
-                html.push_str("</pre>");
+                html.push_str("</code></pre>");
                 html.push_str("</td>");
             }
         }
@@ -1009,4 +1016,13 @@ fn collect_preceding_whitespace(source_code: &[u8], item_start_index: usize) -> 
         source_code[item_diff_whitespace_start as usize..item_start_index].to_vec();
 
     String::from_utf8(whitespace_bytes).expect("Off a code boundary")
+}
+
+fn escape_html(input: &str) -> String {
+    input
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
 }

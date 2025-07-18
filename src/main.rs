@@ -133,9 +133,15 @@ fn run_files(c: Command, output: OutputFormat) -> Result<()> {
     let overview2 = Overview::try_from(file2).context("Error getting overview for file2")?;
 
     let file_diff = overview1.diff_with(&overview2);
+
     match output {
         OutputFormat::Plain => println!("{}", file_diff),
-        OutputFormat::Html => println!("{}", file_diff.to_html()),
+        OutputFormat::Html => {
+            let mut html = HTML_BOILERPLATE.to_string();
+            html.push_str(&file_diff.to_html());
+            html.push_str("</body></html>");
+            println!("{}", html);
+        }
     }
 
     Ok(())

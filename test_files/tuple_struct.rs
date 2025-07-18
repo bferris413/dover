@@ -43,6 +43,10 @@
 // impl Skunk for Rice {
 //     fn cake() -> () {}
 // }
+//
+fn escape_test() -> Result<div> {
+    // <div>this 'is & " some text</div>
+}
 
 enum EnumAdded {
     Variant1,
