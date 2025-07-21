@@ -106,3 +106,8 @@
 
 struct UnitToTuple(u8, u16);
 struct TupleToUnit;
+struct UnitToFields {
+    f1: String,
+    f2: u32,
+}
+struct FieldsToUnit;

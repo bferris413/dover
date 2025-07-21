@@ -75,7 +75,22 @@ impl Diff for Fields {
                 Some(FieldsDiff { diffs: field_diffs })
             }
             (Named(old_named), Unnamed(new_unnamed)) => todo!(),
-            (Named(old_named), Unit) => todo!(),
+            (Named(old_named_fields), Unit) => {
+                // all fields are old
+                let diffs = old_named_fields
+                    .named
+                    .iter()
+                    .map(|field| FieldDiff {
+                        new: None,
+                        old: Some(field.clone()),
+                        change: Change::Existence(ExistenceChange::Deleted),
+                    })
+                    .collect::<Vec<_>>();
+
+                let fields_diff = FieldsDiff { diffs };
+                Some(fields_diff)
+            }
+
             (Unnamed(old_unnamed), Named(new_named)) => todo!(),
             (Unnamed(old_unnamed), Unnamed(new_unnamed)) => {
                 // tuple structs, order matters
@@ -130,7 +145,21 @@ impl Diff for Fields {
                 let fields_diff = FieldsDiff { diffs };
                 Some(fields_diff)
             }
-            (Unit, Named(new_named)) => todo!(),
+            (Unit, Named(new_named_fields)) => {
+                // all fields are new
+                let diffs = new_named_fields
+                    .named
+                    .iter()
+                    .map(|field| FieldDiff {
+                        old: None,
+                        new: Some(field.clone()),
+                        change: Change::Existence(ExistenceChange::Added),
+                    })
+                    .collect::<Vec<_>>();
+
+                let fields_diff = FieldsDiff { diffs };
+                Some(fields_diff)
+            }
             (Unit, Unnamed(new_unnamed_fields)) => {
                 // all fields are new
                 let diffs = new_unnamed_fields
