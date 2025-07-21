@@ -111,3 +111,15 @@ struct UnitToFields {
     f2: u32,
 }
 struct FieldsToUnit;
+
+struct FieldsToTuple(String, u32);
+
+struct TupleToFields {
+    field1: String,
+    field2: u32,
+}
+
+struct FieldsToFields {
+    field1: String,
+    field2: u32,
+}

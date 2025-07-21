@@ -90,3 +90,10 @@ struct FieldsToUnit {
     field1: String,
     field2: u32,
 }
+
+struct FieldsToTuple {
+    field1: String,
+    field2: u32,
+}
+
+struct TupleToFields(String, u32);

@@ -74,7 +74,58 @@ impl Diff for Fields {
 
                 Some(FieldsDiff { diffs: field_diffs })
             }
-            (Named(old_named), Unnamed(new_unnamed)) => todo!(),
+            (Named(old_named), Unnamed(new_unnamed)) => {
+                let mut diffs = Vec::new();
+                // we could diff the types and assume the names don't matter, but for now
+                // we'll just consider old: deleted and new: added. Maybe it could be user
+                // configurable when we add .toml configs
+
+                for old_field in old_named.named.iter() {
+                    let fdiff = FieldDiff {
+                        old: Some(old_field.clone()),
+                        new: None,
+                        change: Change::Existence(ExistenceChange::Deleted),
+                    };
+                    diffs.push(fdiff);
+                }
+
+                for new_field in new_unnamed.unnamed.iter() {
+                    let fdiff = FieldDiff {
+                        new: Some(new_field.clone()),
+                        old: None,
+                        change: Change::Existence(ExistenceChange::Added),
+                    };
+                    diffs.push(fdiff);
+                }
+
+                Some(FieldsDiff { diffs })
+            }
+            (Unnamed(old_unnamed), Named(new_named)) => {
+                let mut diffs = Vec::new();
+                // we could diff the types and assume the names don't matter, but for now
+                // we'll just consider old: deleted and new: added. Maybe it could be user
+                // configurable when we add .toml configs
+
+                for old_field in old_unnamed.unnamed.iter() {
+                    let fdiff = FieldDiff {
+                        old: Some(old_field.clone()),
+                        new: None,
+                        change: Change::Existence(ExistenceChange::Deleted),
+                    };
+                    diffs.push(fdiff);
+                }
+
+                for new_field in new_named.named.iter() {
+                    let fdiff = FieldDiff {
+                        new: Some(new_field.clone()),
+                        old: None,
+                        change: Change::Existence(ExistenceChange::Added),
+                    };
+                    diffs.push(fdiff);
+                }
+
+                Some(FieldsDiff { diffs })
+            }
             (Named(old_named_fields), Unit) => {
                 // all fields are old
                 let diffs = old_named_fields
@@ -91,7 +142,6 @@ impl Diff for Fields {
                 Some(fields_diff)
             }
 
-            (Unnamed(old_unnamed), Named(new_named)) => todo!(),
             (Unnamed(old_unnamed), Unnamed(new_unnamed)) => {
                 // tuple structs, order matters
 
