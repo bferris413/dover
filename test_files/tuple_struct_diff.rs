@@ -85,21 +85,24 @@
 //     U: Cake,
 //     T: Eggs;
 
-enum EnumAdded {
-    Variant1,
-    Variant2,
-    Variant3,
-}
+// enum EnumAdded {
+//     Variant1,
+//     Variant2,
+//     Variant3,
+// }
 
-enum VariantDiff {
-    Variant2,
-    Variant1 { field1: u32, field2: String },
-}
-// struct FieldAddedTuple(u8, u16, u32);
+// enum VariantDiff {
+//     Variant2,
+//     Variant1 { field1: u32, field2: String },
+// }
+// // struct FieldAddedTuple(u8, u16, u32);
 
-struct FieldAddedNormal {
-    a1: String,
-    f1: u16,
-    f2: u32,
-    f3: u64,
-}
+// struct FieldAddedNormal {
+//     a1: String,
+//     f1: u16,
+//     f2: u32,
+//     f3: u64,
+// }
+
+struct UnitToTuple(u8, u16);
+struct TupleToUnit;

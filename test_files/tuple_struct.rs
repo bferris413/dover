@@ -44,26 +44,27 @@
 //     fn cake() -> () {}
 // }
 //
-fn escape_test() -> Result<div> {
-    // <div>this 'is & " some text</div>
-}
 
-enum EnumAdded {
-    Variant1,
-    Variant2,
-}
+// fn escape_test() -> Result<div> {
+//     // <div>this 'is & " some text</div>
+// }
 
-enum VariantDiff {
-    Variant1 { field2: String },
-    Variant2,
-}
+// enum EnumAdded {
+//     Variant1,
+//     Variant2,
+// }
 
-// struct Struct1;
-// struct FieldAddedTuple(u8, u16);
-struct FieldAddedNormal {
-    f1: u16,
-    f2: u32,
-}
+// enum VariantDiff {
+//     Variant1 { field2: String },
+//     Variant2,
+// }
+
+// // struct Struct1;
+// // struct FieldAddedTuple(u8, u16);
+// struct FieldAddedNormal {
+//     f1: u16,
+//     f2: u32,
+// }
 // impl Struct {
 //     fn new(field2: u64) -> Self {
 //         Self
@@ -81,3 +82,6 @@ struct FieldAddedNormal {
 //     field2: U,
 //     field3: V,
 // }
+
+struct UnitToTuple;
+struct TupleToUnit(String);

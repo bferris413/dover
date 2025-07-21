@@ -115,9 +115,37 @@ impl Diff for Fields {
                 let fields_diff = FieldsDiff { diffs };
                 Some(fields_diff)
             }
-            (Unnamed(old_unnamed), Unit) => todo!(),
-            (Unit, Named(old_named)) => todo!(),
-            (Unit, Unnamed(old_unnamed)) => todo!(),
+            (Unnamed(old_unnamed_fields), Unit) => {
+                // all fields are old
+                let diffs = old_unnamed_fields
+                    .unnamed
+                    .iter()
+                    .map(|field| FieldDiff {
+                        new: None,
+                        old: Some(field.clone()),
+                        change: Change::Existence(ExistenceChange::Deleted),
+                    })
+                    .collect::<Vec<_>>();
+
+                let fields_diff = FieldsDiff { diffs };
+                Some(fields_diff)
+            }
+            (Unit, Named(new_named)) => todo!(),
+            (Unit, Unnamed(new_unnamed_fields)) => {
+                // all fields are new
+                let diffs = new_unnamed_fields
+                    .unnamed
+                    .iter()
+                    .map(|field| FieldDiff {
+                        old: None,
+                        new: Some(field.clone()),
+                        change: Change::Existence(ExistenceChange::Added),
+                    })
+                    .collect::<Vec<_>>();
+
+                let fields_diff = FieldsDiff { diffs };
+                Some(fields_diff)
+            }
             (Unit, Unit) => unreachable!(),
         }
     }
