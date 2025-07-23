@@ -86,9 +86,12 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
                 let overview2 =
                     Overview::try_from((path, after_contents)).context("Error getting overview")?;
 
-                match output {
-                    OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
-                    OutputFormat::Html => html.push_str(&overview1.diff_with(&overview2).to_html()),
+                let overview_diff = overview1.diff_with(&overview2);
+                if !overview_diff.all_empty() {
+                    match output {
+                        OutputFormat::Plain => println!("{overview_diff}"),
+                        OutputFormat::Html => html.push_str(&overview_diff.to_html()),
+                    }
                 }
             }
             GitChange::Added { contents } => {
@@ -97,9 +100,12 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
                 let overview2 =
                     Overview::try_from((path, contents)).context("Error getting overview")?;
 
-                match output {
-                    OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
-                    OutputFormat::Html => html.push_str(&overview1.diff_with(&overview2).to_html()),
+                let overview_diff = overview1.diff_with(&overview2);
+                if !overview_diff.all_empty() {
+                    match output {
+                        OutputFormat::Plain => println!("{overview_diff}"),
+                        OutputFormat::Html => html.push_str(&overview_diff.to_html()),
+                    }
                 }
             }
             GitChange::Deleted { contents } => {
@@ -108,9 +114,12 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
                 let overview2 =
                     Overview::try_from((path, "".to_string())).context("Error getting overview")?;
 
-                match output {
-                    OutputFormat::Plain => println!("{}", overview1.diff_with(&overview2)),
-                    OutputFormat::Html => html.push_str(&overview1.diff_with(&overview2).to_html()),
+                let overview_diff = overview1.diff_with(&overview2);
+                if !overview_diff.all_empty() {
+                    match output {
+                        OutputFormat::Plain => println!("{overview_diff}"),
+                        OutputFormat::Html => html.push_str(&overview_diff.to_html()),
+                    }
                 }
             }
         }

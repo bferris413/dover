@@ -18,13 +18,18 @@
 - From<TraitItemFn> for Function - tricky, we're lossy converting TraitItemFn to ItemFn
 - introduce .toml config for user config output
 - associate impl blocks with their respective enum/struct if within same file
-- Code should be escaped before returning HTML output
 - HTML output doesn't do spacing between members correctly (should mimic stdout)
 - We need to pull files from git instead of the filesystem, I think this existed previously but got obliterated somehow.
+- Function diffs: old doesn't have doc comment, new does (but it's not marked as new)
+- html - diff items (function signatures) have a leading space (?)
+- html - added functions (at least standalone and impl) don't have spaces between
+- html - horiz width should have a default min with horiz scroll on overflow (per column overflow)
+- html - filenames are printed even if there's no diff
 
 -- BUG --------------------------------------------------------------------------
 
 -- DONE ------------------------------------------------------------------------
+- done - Code should be escaped before returning HTML output
 - done - enum variants don't elide whitespace/irrelevant members like other 'container' types
 - done - struct fields assume order matters, but this is only relevant for tuple structs
 - done - remove irrelevant details from structs
