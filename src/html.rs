@@ -63,8 +63,6 @@ pub const HTML_BOILERPLATE: &str = r#"
         /* Added content */
         .added {
             color: #00ad14;
-            padding: 2px 4px;
-            border-radius: 4px;
         }
 
         /* Remove the bottom border from the last row */
@@ -75,8 +73,6 @@ pub const HTML_BOILERPLATE: &str = r#"
         /* Removed content */
         .deleted {
             color: #ad0500;
-            padding: 2px 4px;
-            border-radius: 4px;
         }
     </style>
 </head>
