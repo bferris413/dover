@@ -54,15 +54,24 @@ impl ViewableDiffs {
     pub fn new(diffs: Vec<ViewableDiff>) -> Self {
         ViewableDiffs { vds: diffs }
     }
+
     pub fn is_empty(&self) -> bool {
         self.vds.is_empty()
     }
+
     pub fn empty() -> ViewableDiffs {
         Self { vds: Vec::new() }
     }
+
     pub fn append(&mut self, mut diffs: ViewableDiffs) {
         self.vds.append(&mut diffs.vds);
     }
+
+    pub fn appendln(&mut self, mut diffs: ViewableDiffs) {
+        self.vds.append(&mut diffs.vds);
+        self.vds.push(ViewableDiff::newline());
+    }
+
     pub fn collapse(&mut self) {
         if self.vds.is_empty() {
             return;
@@ -74,9 +83,11 @@ impl ViewableDiffs {
         for diff in self.vds.iter_mut() {
             if let Some(ref mut old) = diff.old {
                 collapsed_old.append(old);
+                collapsed_old.push((None, Code("\n".to_string())));
             }
             if let Some(ref mut new) = diff.new {
                 collapsed_new.append(new);
+                collapsed_new.push((None, Code("\n".to_string())));
             }
         }
 
@@ -445,6 +456,14 @@ impl Display for ViewableDiffs {
 pub struct ViewableDiff {
     old: Option<Vec<(Option<ExistenceChange>, Code)>>,
     new: Option<Vec<(Option<ExistenceChange>, Code)>>,
+}
+impl ViewableDiff {
+    fn newline() -> ViewableDiff {
+        ViewableDiff {
+            old: Some(vec![(None, Code("\n".to_string()))]),
+            new: Some(vec![(None, Code("\n".to_string()))]),
+        }
+    }
 }
 impl Display for ViewableDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
