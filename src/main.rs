@@ -7,7 +7,7 @@ use dover::{Diff, GitChange, HTML_BOILERPLATE, Html, Overview, Treeish};
 #[derive(Debug, Parser)]
 #[command(author, version = crate_version!(), about = "Diff OVERview - summarize git diffs of Rust code")]
 struct Cli {
-    #[arg(long, default_value_t = false)]
+    #[arg(long, global = true, default_value_t = false)]
     to_html: bool,
 
     #[command(subcommand)]
