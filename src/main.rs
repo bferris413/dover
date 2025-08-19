@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, crate_version};
 use dover::{Diff, GitChange, HTML_BOILERPLATE, Html, Overview, Treeish};
 
 #[derive(Debug, Parser)]
-#[command(author, version, about = "Diff OVERview")]
+#[command(author, version = crate_version!(), about = "Diff OVERview - summarize git diffs of Rust code")]
 struct Cli {
     #[arg(long, default_value_t = false)]
     to_html: bool,
@@ -33,7 +33,6 @@ impl OutputFormat {
 enum Command {
     /// Diff two commits (emulates `git diff [SHA-1 [SHA-1]]`)
     Diff {
-        /// a test thing
         commit1: Option<String>,
         commit2: Option<String>,
     },

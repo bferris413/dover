@@ -334,18 +334,21 @@ impl ByteRange for FieldDiff {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[allow(unused)]
 pub struct TypeDiff {
     old: Type,
     new: Type,
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[allow(unused)]
 pub struct NameDiff {
     old: Option<String>,
     new: Option<String>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[allow(unused)]
 pub struct MutabilityDiff {
     old: FieldMutability,
     new: FieldMutability,

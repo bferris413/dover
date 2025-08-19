@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use git2::{Delta, Oid, Repository};
+use git2::{Delta, FileMode, Oid, Repository};
 use std::{fmt::Display, fs, path::PathBuf};
 
 /// Represents the type of change for a file.
@@ -39,6 +39,7 @@ impl Display for ChangedFile {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Treeish {
     commit1: String,
     commit2: Option<String>,
@@ -49,6 +50,7 @@ impl Treeish {
     }
 }
 
+#[derive(Debug)]
 pub struct RepoChangedFiles {
     pub changed_files: Vec<ChangedFile>,
     pub repo_workdir: PathBuf,
@@ -64,11 +66,14 @@ pub fn get_changed_files(
         bail!("Couldn't get workdir from {}", repo_path.display());
     };
 
+    let mut index_to_workdir = false;
     let diff = match trees_to_diff {
         // emulates `git diff`
-        None => repo
-            .diff_index_to_workdir(None, None)
-            .context("Couldn't get diff from index to workdir")?,
+        None => {
+            index_to_workdir = true;
+            repo.diff_index_to_workdir(None, None)
+                .context("Couldn't get diff from index to workdir")?
+        }
         Some(Treeish { commit1, commit2 }) => {
             let (c1_tree, c2_tree) = {
                 // we need to find the tree associated with each commit
@@ -98,7 +103,7 @@ pub fn get_changed_files(
                 Some(_) => repo
                     .diff_tree_to_tree(Some(&c1_tree), c2_tree.as_ref(), None)
                     .context("Couldn't get diff from {commit1}")?,
-                None => repo.diff_tree_to_workdir(Some(&c1_tree), None)?,
+                None => repo.diff_tree_to_workdir_with_index(Some(&c1_tree), None)?,
             }
         }
     };
@@ -119,21 +124,44 @@ pub fn get_changed_files(
     let mut changed_files = Vec::new();
     diff.foreach(
         &mut |delta, _| {
+            // Check if the entry is a regular file
+            let is_regular_file = match delta.status() {
+                Delta::Added | Delta::Modified | Delta::Deleted => {
+                    let new_file_mode = delta.new_file().mode();
+                    let old_file_mode = delta.old_file().mode();
+
+                    new_file_mode == FileMode::Blob && old_file_mode == FileMode::Blob
+                }
+                _ => false, // Ignore other types of changes
+            };
+
+            if !is_regular_file {
+                // Skip submodules or non-regular files
+                return true;
+            }
+
             match delta.status() {
                 Delta::Added => {
                     let Some(path) = delta.new_file().path() else {
                         // Ignore files without a path
                         return true;
                     };
+                    let new_oid = delta.new_file().id();
 
-                    let full_path = repo_path.join(path);
-
-                    let contents = match fs::read_to_string(full_path) {
-                        Ok(contents) => contents,
-                        Err(e) => {
-                            eprintln!("Couldn't read {}: {e}", path.display());
-                            return true;
+                    let contents = if index_to_workdir {
+                        // new file is in the workdir,
+                        // according to Repository::diff_index_to_workdir docs
+                        let new_full_path = repo_path.join(path);
+                        match fs::read_to_string(&new_full_path) {
+                            Ok(contents) => contents,
+                            Err(e) => {
+                                eprintln!("Couldn't read {}: {e}", new_full_path.display());
+                                return true;
+                            }
                         }
+                    } else {
+                        // new file is in the repo
+                        get_blob_contents(&repo, &new_oid).unwrap()
                     };
 
                     let change = ChangedFile {
@@ -162,16 +190,22 @@ pub fn get_changed_files(
                         return true;
                     }
 
-                    // old file is in the index, new file is in the workdir,
-                    // according to Repository::diff_index_to_workdir docs
                     let before_contents = get_blob_contents(&repo, &old_oid).unwrap();
-                    let new_full_path = repo_path.join(new_path);
-                    let after_contents = match fs::read_to_string(&new_full_path) {
-                        Ok(contents) => contents,
-                        Err(e) => {
-                            eprintln!("Couldn't read {}: {e}", new_full_path.display());
-                            return true;
+                    let after_contents = if index_to_workdir {
+                        // old file is in the index, new file is in the workdir,
+                        // according to Repository::diff_index_to_workdir docs
+                        //
+                        let new_full_path = repo_path.join(new_path);
+                        match fs::read_to_string(&new_full_path) {
+                            Ok(contents) => contents,
+                            Err(e) => {
+                                eprintln!("Couldn't read {}: {e}", new_full_path.display());
+                                return true;
+                            }
                         }
+                    } else {
+                        // new file is in the repo
+                        get_blob_contents(&repo, &new_oid).unwrap()
                     };
 
                     // TODO: is this true?
