@@ -80,7 +80,7 @@ impl Diff for Variants {
         }
 
         if variant_diffs.is_empty() {
-            return None;
+            None
         } else {
             let variants_diff = VariantDiffs {
                 diffs: variant_diffs,
@@ -196,8 +196,8 @@ impl Diff for Variant {
                 new: Some(new),
                 old_src: Some(self.source.clone()),
                 new_src: Some(other.source.clone()),
-                old_src_map: old_src_map,
-                new_src_map: new_src_map,
+                old_src_map,
+                new_src_map,
             })
         }
     }
@@ -221,6 +221,9 @@ impl VariantDiff {
     pub fn old(&self) -> Option<&Variant> {
         self.old.as_ref()
     }
+
+    #[allow(clippy::wrong_self_convention)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(&self) -> Option<&Variant> {
         self.new.as_ref()
     }
@@ -233,7 +236,7 @@ impl View for VariantDiff {
 
         let old_diff = collect_variant_diff_changes(
             self.old.as_ref().unwrap(),
-            &self.old_src.as_ref().unwrap().0.as_bytes(),
+            self.old_src.as_ref().unwrap().0.as_bytes(),
             &self.old_src_map,
             &self.fields_diff,
             ExistenceChange::Deleted,
@@ -241,7 +244,7 @@ impl View for VariantDiff {
 
         let new_diff = collect_variant_diff_changes(
             self.new.as_ref().unwrap(),
-            &self.new_src.as_ref().unwrap().0.as_bytes(),
+            self.new_src.as_ref().unwrap().0.as_bytes(),
             &self.new_src_map,
             &self.fields_diff,
             ExistenceChange::Added,
@@ -410,7 +413,7 @@ fn collect_field_diffs(
 
     // It's possible we don't have any diffs and yet the variant has fields.
     // In this case, we should add some visual cue to indicate we elided irrelevant fields.
-    if diffs.is_empty() && variant.original.fields.len() != 0 {
+    if diffs.is_empty() && variant.original.fields.is_empty() {
         let elided_whitespace =
             crate::collect_elided_whitespace(sig_end, source_code, variant_range.end);
         diffs.push((None, Code(elided_whitespace)));

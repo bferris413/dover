@@ -49,8 +49,8 @@ impl Impls {
             }
         }
         let impls = merged_impls
-            .into_iter()
-            .map(|(_, impl_)| Impl::new(impl_, source.clone()))
+            .into_values()
+            .map(|impl_| Impl::new(impl_, source.clone()))
             .collect();
 
         Impls { impls }
@@ -74,7 +74,7 @@ impl Diff for Impls {
 
             match impl_with_matching_type {
                 Some(i) => {
-                    if let Some(diff) = impl_.diff_with(&i) {
+                    if let Some(diff) = impl_.diff_with(i) {
                         impl_diffs.push(diff);
                     }
                 }
@@ -134,10 +134,10 @@ impl Diff for Impls {
         // file2
         // Everything here is either new or already accounted for
         for impl_ in &other.impls {
-            if let None = self
+            if !self
                 .impls
                 .iter()
-                .find(|i| i.self_ty == impl_.self_ty && i.trait_ == impl_.trait_)
+                .any(|i| i.self_ty == impl_.self_ty && i.trait_ == impl_.trait_)
             {
                 // impl was added
                 let unsafe_diff: Option<UnsafeDiff> = None;
@@ -212,7 +212,7 @@ pub struct Impl {
 }
 impl Impl {
     pub fn new(i: ItemImpl, source: SourceFile) -> Self {
-        let unsafety = i.unsafety.clone();
+        let unsafety = i.unsafety;
         let generics = Generics::from(i.generics.clone());
         let trait_ = i.trait_.clone();
         let self_ty = i.self_ty.clone();
@@ -363,7 +363,7 @@ impl View for ImplDiff {
         if let Some(old) = self.old.as_ref() {
             old_diff = collect_impl_diff_changes(
                 old,
-                &self.old_src.as_ref().unwrap().0.as_bytes(),
+                self.old_src.as_ref().unwrap().0.as_bytes(),
                 &self.old_src_map,
                 ExistenceChange::Deleted,
                 match self.change {
@@ -378,7 +378,7 @@ impl View for ImplDiff {
         if let Some(new) = self.new.as_ref() {
             new_diff = collect_impl_diff_changes(
                 new,
-                &self.new_src.as_ref().unwrap().0.as_bytes(),
+                self.new_src.as_ref().unwrap().0.as_bytes(),
                 &self.new_src_map,
                 ExistenceChange::Added,
                 match self.change {
@@ -442,7 +442,7 @@ fn collect_impl_diff_changes(
         };
         let item_diff_changes = collect_item_diffs(
             source_code,
-            &impl_,
+            impl_,
             sig_end,
             ids,
             get_orig_item,

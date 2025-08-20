@@ -72,19 +72,15 @@ impl View for UseDiff {
         let source = &self.use_.0;
         let change = vec![(Some(self.change), Code(format!("{source}\n")))];
         match self.change {
-            ExistenceChange::Deleted => {
-                return ViewableDiffs::new(vec![ViewableDiff {
-                    old: Some(change),
-                    new: None,
-                }])
-            }
-            ExistenceChange::Added => {
-                return ViewableDiffs::new(vec![ViewableDiff {
-                    old: None,
-                    new: Some(change),
-                }])
-            }
-        };
+            ExistenceChange::Deleted => ViewableDiffs::new(vec![ViewableDiff {
+                old: Some(change),
+                new: None,
+            }]),
+            ExistenceChange::Added => ViewableDiffs::new(vec![ViewableDiff {
+                old: None,
+                new: Some(change),
+            }]),
+        }
     }
 }
 
@@ -144,14 +140,14 @@ fn get_paths_from_usetree_with_depth(tree: &UseTree, depth: usize) -> Vec<Use> {
             paths.push(Use(format!(
                 "{}{}",
                 if depth == 0 { "use " } else { "" },
-                name.ident.to_string()
+                name.ident
             )));
         }
         syn::UseTree::Rename(rename) => {
             paths.push(Use(format!(
                 "{}{}",
                 if depth == 0 { "use " } else { "" },
-                rename.ident.to_string()
+                rename.ident
             )));
         }
         syn::UseTree::Glob(_) => {

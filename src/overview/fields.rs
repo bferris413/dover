@@ -38,7 +38,7 @@ impl Diff for Fields {
                             .cmp(field.ident.as_ref().unwrap())
                     }) {
                         Ok(new_field_i) => {
-                            if let Some(diff) = field.diff_with(&new_named[new_field_i]) {
+                            if let Some(diff) = field.diff_with(new_named[new_field_i]) {
                                 field_diffs.push(diff);
                             }
                         }
@@ -61,7 +61,7 @@ impl Diff for Fields {
                         f.ident
                             .as_ref()
                             .unwrap()
-                            .cmp(&field_.ident.as_ref().unwrap())
+                            .cmp(field_.ident.as_ref().unwrap())
                     }) {
                         let fdiff = FieldDiff {
                             old: None,
@@ -285,7 +285,6 @@ impl Diff for syn::Field {
         })
     }
 }
-
 #[derive(Debug, Eq, PartialEq)]
 pub struct FieldDiff {
     change: Change,
@@ -299,6 +298,9 @@ impl FieldDiff {
     pub fn old(&self) -> Option<&syn::Field> {
         self.old.as_ref()
     }
+
+    #[allow(clippy::wrong_self_convention)]
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(&self) -> Option<&syn::Field> {
         self.new.as_ref()
     }
@@ -307,11 +309,11 @@ impl View for FieldDiff {
     fn as_viewable(&self) -> crate::ViewableDiffs {
         let old = self.old().map(|field| {
             let source = field.span().source_text().expect(NO_SRC_ERROR);
-            vec![(Some(ExistenceChange::Deleted), Code(format!("{source}")))]
+            vec![(Some(ExistenceChange::Deleted), Code(source.to_string()))]
         });
         let new = self.new().map(|field| {
             let source = field.span().source_text().expect(NO_SRC_ERROR);
-            vec![(Some(ExistenceChange::Added), Code(format!("{source}")))]
+            vec![(Some(ExistenceChange::Added), Code(source.to_string()))]
         });
 
         ViewableDiffs::new(vec![ViewableDiff { old, new }])

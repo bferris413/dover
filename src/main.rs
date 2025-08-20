@@ -59,17 +59,14 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
         unreachable!();
     };
 
-    let trees = commit1.map(|c1| {
-        let treeish = Treeish::new(c1, commit2);
-        treeish
-    });
+    let trees = commit1.map(|c1| Treeish::new(c1, commit2));
 
     let repo_changes = dover::get_changed_files(PathBuf::from("."), trees)?;
 
     let changes = repo_changes
         .changed_files
         .into_iter()
-        .filter(|c| c.path.extension().map_or(false, |ext| ext == "rs"));
+        .filter(|c| c.path.extension().is_some_and(|ext| ext == "rs"));
 
     let mut html = HTML_BOILERPLATE.to_string();
 

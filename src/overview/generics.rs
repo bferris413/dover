@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use syn::{spanned::Spanned, GenericParam, Generics as SynGenerics, WhereClause, WherePredicate};
+use syn::{GenericParam, Generics as SynGenerics, WhereClause, WherePredicate, spanned::Spanned};
 
 use crate::{ByteRange, Change, Diff, ExistenceChange};
 
@@ -38,7 +38,7 @@ impl Diff for Generics {
 }
 impl From<SynGenerics> for Generics {
     fn from(generics: syn::Generics) -> Self {
-        let params = generics.params.iter().map(|p| p.clone()).collect();
+        let params = generics.params.iter().cloned().collect();
         let where_clause = generics.where_clause.clone();
         Self {
             params,
@@ -82,7 +82,7 @@ impl Diff for Vec<GenericParam> {
         }
 
         if param_diffs.is_empty() {
-            return None;
+            None
         } else {
             Some(param_diffs)
         }
@@ -117,7 +117,7 @@ impl Diff for Option<WhereClause> {
                 // coarse-grained predicate diff (only supports existence changes)
                 let mut predicate_diffs = Vec::new();
                 for predicate in w1.predicates.iter() {
-                    if !w2.predicates.iter().find(|p2| *p2 == predicate).is_some() {
+                    if !w2.predicates.iter().any(|p2| p2 == predicate) {
                         let change = ExistenceChange::Deleted;
                         let diff = PredicateDiff {
                             change,
@@ -127,7 +127,7 @@ impl Diff for Option<WhereClause> {
                     }
                 }
                 for predicate in w2.predicates.iter() {
-                    if !w1.predicates.iter().find(|p1| *p1 == predicate).is_some() {
+                    if !w1.predicates.iter().any(|p1| p1 == predicate) {
                         let change = ExistenceChange::Added;
                         let diff = PredicateDiff {
                             change,

@@ -26,7 +26,7 @@ impl Functions {
             .into_iter()
             .map(|item| Function::new_freestanding(item, source.clone()))
             .collect();
-        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
+        functions.sort_by(|f1, f2| f1.name().cmp(f2.name()));
         functions.dedup_by(|f1, f2| f1.name() == f2.name());
         Functions(functions)
     }
@@ -35,7 +35,7 @@ impl Functions {
             .into_iter()
             .map(|item| Function::new_impl(item, source.clone()))
             .collect();
-        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
+        functions.sort_by(|f1, f2| f1.name().cmp(f2.name()));
         functions.dedup_by(|f1, f2| f1.name() == f2.name());
         Functions(functions)
     }
@@ -44,7 +44,7 @@ impl Functions {
             .into_iter()
             .map(|item| Function::new_trait(item, source.clone()))
             .collect();
-        functions.sort_by(|f1, f2| f1.name().cmp(&f2.name()));
+        functions.sort_by(|f1, f2| f1.name().cmp(f2.name()));
         functions.dedup_by(|f1, f2| f1.name() == f2.name());
         Functions(functions)
     }
@@ -68,7 +68,7 @@ impl Diff for Functions {
         let mut function_diffs = Vec::with_capacity(usize::max(self.0.len(), other.0.len()));
 
         for function in &self.0 {
-            match other.0.binary_search_by(|s| s.name().cmp(&function.name())) {
+            match other.0.binary_search_by(|s| s.name().cmp(function.name())) {
                 Ok(s) => {
                     if let Some(diff) = function.diff_with(&other.0[s]) {
                         function_diffs.push(diff);
@@ -89,7 +89,7 @@ impl Diff for Functions {
 
         // Everything here is either new or already diffed
         for function in &other.0 {
-            if let Err(_e) = self.0.binary_search_by(|s| s.name().cmp(&function.name())) {
+            if let Err(_e) = self.0.binary_search_by(|s| s.name().cmp(function.name())) {
                 let fdiff = FunctionDiff {
                     change: Change::Existence(ExistenceChange::Added),
                     old: None,
@@ -282,6 +282,9 @@ impl FunctionDiff {
     pub(crate) fn old(&self) -> &Option<Function> {
         &self.old
     }
+
+    #[allow(clippy::new_ret_no_self)]
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn new(&self) -> &Option<Function> {
         &self.new
     }
@@ -573,6 +576,8 @@ impl FnArgDiff {
         self.old.as_ref()
     }
 
+    #[allow(clippy::new_ret_no_self)]
+    #[allow(clippy::wrong_self_convention)]
     fn new(&self) -> Option<&FnArg> {
         self.new.as_ref()
     }
@@ -628,16 +633,14 @@ impl ByteRange for FunctionsDiff {
     fn old_ranges(&self) -> Vec<Range<usize>> {
         self.diffs
             .iter()
-            .map(|diff| diff.old_ranges())
-            .flatten()
+            .flat_map(|diff| diff.old_ranges())
             .collect()
     }
 
     fn new_ranges(&self) -> Vec<Range<usize>> {
         self.diffs
             .iter()
-            .map(|diff| diff.new_ranges())
-            .flatten()
+            .flat_map(|diff| diff.new_ranges())
             .collect()
     }
 }
@@ -657,20 +660,16 @@ pub struct InputsDiff {
 impl ByteRange for InputsDiff {
     fn old_ranges(&self) -> Vec<Range<usize>> {
         let mut old_ranges = Vec::new();
-        for input in self.inputs.iter() {
-            if let Some(arg_diff) = input {
-                old_ranges.append(&mut arg_diff.old_ranges());
-            }
+        for arg_diff in self.inputs.iter().flatten() {
+            old_ranges.append(&mut arg_diff.old_ranges());
         }
         old_ranges
     }
 
     fn new_ranges(&self) -> Vec<Range<usize>> {
         let mut new_ranges = Vec::new();
-        for input in self.inputs.iter() {
-            if let Some(arg_diff) = input {
-                new_ranges.append(&mut arg_diff.new_ranges());
-            }
+        for arg_diff in self.inputs.iter().flatten() {
+            new_ranges.append(&mut arg_diff.new_ranges());
         }
         new_ranges
     }
@@ -809,6 +808,8 @@ impl ReturnTypeDiff {
         &self.old
     }
 
+    #[allow(clippy::new_ret_no_self)]
+    #[allow(clippy::wrong_self_convention)]
     fn new(&self) -> &ReturnType {
         &self.new
     }
@@ -842,11 +843,11 @@ impl Diff for Option<Unsafe> {
             (None, Some(unsfe)) => Some(UnsafeDiff {
                 existence: ExistenceChange::Added,
                 old: None,
-                new: Some(unsfe.clone()),
+                new: Some(*unsfe),
             }),
             (Some(unsfe), None) => Some(UnsafeDiff {
                 existence: ExistenceChange::Deleted,
-                old: Some(unsfe.clone()),
+                old: Some(*unsfe),
                 new: None,
             }),
             (None, None) => None,
@@ -867,11 +868,11 @@ impl Diff for Option<Async> {
             (None, Some(c)) => Some(AsyncDiff {
                 existence: ExistenceChange::Added,
                 old: None,
-                new: Some(c.clone()),
+                new: Some(*c),
             }),
             (Some(c), None) => Some(AsyncDiff {
                 existence: ExistenceChange::Deleted,
-                old: Some(c.clone()),
+                old: Some(*c),
                 new: None,
             }),
             (None, None) => None,
@@ -892,11 +893,11 @@ impl Diff for Option<Const> {
             (None, Some(c)) => Some(ConstDiff {
                 existence: ExistenceChange::Added,
                 old: None,
-                new: Some(c.clone()),
+                new: Some(*c),
             }),
             (Some(c), None) => Some(ConstDiff {
                 existence: ExistenceChange::Deleted,
-                old: Some(c.clone()),
+                old: Some(*c),
                 new: None,
             }),
             (None, None) => None,

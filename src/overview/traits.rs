@@ -22,7 +22,7 @@ pub struct Traits(pub Vec<Trait>);
 impl Traits {
     /// Creates a complete set of `struct` declarations from a list of `Trait`s.
     pub fn from(mut traits: Vec<Trait>) -> Self {
-        traits.sort_by(|t1, t2| t1.name().cmp(&t2.name()));
+        traits.sort_by(|t1, t2| t1.name().cmp(t2.name()));
         traits.dedup_by(|t1, t2| t1.name() == t2.name());
         Traits(traits)
     }
@@ -249,7 +249,7 @@ impl View for TraitDiff {
 
         let old_diff = collect_trait_diff_changes(
             self.old.as_ref().unwrap(),
-            &self.old_src.as_ref().unwrap().0.as_bytes(),
+            self.old_src.as_ref().unwrap().0.as_bytes(),
             &self.old_src_map,
             &self.items_diff,
             ExistenceChange::Deleted,
@@ -257,7 +257,7 @@ impl View for TraitDiff {
 
         let new_diff = collect_trait_diff_changes(
             self.new.as_ref().unwrap(),
-            &self.new_src.as_ref().unwrap().0.as_bytes(),
+            self.new_src.as_ref().unwrap().0.as_bytes(),
             &self.new_src_map,
             &self.items_diff,
             ExistenceChange::Added,
@@ -377,7 +377,7 @@ fn collect_trait_diff_changes(
         };
         let diffs_as_changes = collect_item_diff_changes(
             source_code,
-            &trait_,
+            trait_,
             sig_end,
             item_diffs,
             get_orig_item,
@@ -482,7 +482,7 @@ pub struct TraitItemsDiff {
 }
 impl TraitItemsDiff {
     pub fn diffs(&self) -> &[FunctionDiff] {
-        &self.fns_diff.diffs()
+        self.fns_diff.diffs()
     }
     pub fn len(&self) -> usize {
         self.fns_diff.diffs().len()

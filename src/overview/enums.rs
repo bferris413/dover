@@ -25,7 +25,7 @@ pub struct Enums(pub Vec<Enum>);
 impl Enums {
     /// Creates a complete set of `enum` declarations from a list of `Enum`s.
     pub fn from(mut enums: Vec<Enum>) -> Self {
-        enums.sort_by(|e1, e2| e1.name().cmp(&e2.name()));
+        enums.sort_by(|e1, e2| e1.name().cmp(e2.name()));
         enums.dedup_by(|e1, e2| e1.name() == e2.name());
         Enums(enums)
     }
@@ -103,7 +103,7 @@ pub struct Enum {
 impl Enum {
     pub fn new(e: ItemEnum, source: SourceFile) -> Self {
         let original = e.clone();
-        let vis = e.vis.into();
+        let vis = e.vis;
         let name = e.ident.to_string();
         let variants: Vec<_> = e.variants.into_iter().collect();
         let variants = Variants::new(variants, source.clone());
@@ -232,7 +232,7 @@ impl View for EnumDiff {
 
         let old_diff = collect_enum_diff_changes(
             self.old.as_ref().unwrap(),
-            &self.old_src.as_ref().unwrap().0.as_bytes(),
+            self.old_src.as_ref().unwrap().0.as_bytes(),
             &self.old_src_map,
             &self.variants_diff,
             ExistenceChange::Deleted,
@@ -240,7 +240,7 @@ impl View for EnumDiff {
 
         let new_diff = collect_enum_diff_changes(
             self.new.as_ref().unwrap(),
-            &self.new_src.as_ref().unwrap().0.as_bytes(),
+            self.new_src.as_ref().unwrap().0.as_bytes(),
             &self.new_src_map,
             &self.variants_diff,
             ExistenceChange::Added,
@@ -267,18 +267,14 @@ fn collect_existence_diff_changes(
     let source = _enum.span().source_text().expect(NO_SRC_ERROR);
     let change = vec![(Some(ex), Code(format!("{source}\n")))];
     match ex {
-        ExistenceChange::Deleted => {
-            return ViewableDiffs::new(vec![ViewableDiff {
-                old: Some(change),
-                new: None,
-            }]);
-        }
-        ExistenceChange::Added => {
-            return ViewableDiffs::new(vec![ViewableDiff {
-                old: None,
-                new: Some(change),
-            }]);
-        }
+        ExistenceChange::Deleted => ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(change),
+            new: None,
+        }]),
+        ExistenceChange::Added => ViewableDiffs::new(vec![ViewableDiff {
+            old: None,
+            new: Some(change),
+        }]),
     }
 }
 
@@ -314,7 +310,7 @@ fn collect_enum_diff_changes(
         };
         let diffs_as_changes = collect_variant_diffs(
             source_code,
-            &enum_,
+            enum_,
             sig_end,
             variant_diffs,
             get_orig_field,

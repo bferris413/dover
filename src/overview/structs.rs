@@ -25,7 +25,7 @@ pub struct Structs(pub Vec<Struct>);
 impl Structs {
     /// Creates a complete set of `struct` declarations from a list of `Struct`s.
     pub fn from(mut structs: Vec<Struct>) -> Self {
-        structs.sort_by(|s1, s2| s1.name().cmp(&s2.name()));
+        structs.sort_by(|s1, s2| s1.name().cmp(s2.name()));
         structs.dedup_by(|s1, s2| s1.name() == s2.name());
         Structs(structs)
     }
@@ -231,7 +231,7 @@ impl View for StructDiff {
 
         let old_diff = collect_struct_diff_changes(
             self.old.as_ref().unwrap(),
-            &self.old_src.as_ref().unwrap().0.as_bytes(),
+            self.old_src.as_ref().unwrap().0.as_bytes(),
             &self.old_src_map,
             &self.fields_diff,
             ExistenceChange::Deleted,
@@ -239,7 +239,7 @@ impl View for StructDiff {
 
         let new_diff = collect_struct_diff_changes(
             self.new.as_ref().unwrap(),
-            &self.new_src.as_ref().unwrap().0.as_bytes(),
+            self.new_src.as_ref().unwrap().0.as_bytes(),
             &self.new_src_map,
             &self.fields_diff,
             ExistenceChange::Added,
@@ -387,7 +387,7 @@ fn collect_field_diffs(
 
     // It's possible we don't have any diffs and yet the struct has fields.
     // In this case, we should add some visual cue to indicate we elided irrelevant fields.
-    if diffs.is_empty() && struct_.fields.len() != 0 {
+    if diffs.is_empty() && struct_.fields.is_empty() {
         let elided_whitespace =
             crate::collect_elided_whitespace(sig_end, source_code, struct_range.end);
         diffs.push((None, Code(elided_whitespace)));
