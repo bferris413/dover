@@ -27,6 +27,7 @@
 - html - filenames are printed even if there's no diff
 
 -- BUG --------------------------------------------------------------------------
+- empty struct variants pull a bunch of extra stuff (see samples in this commit)
 
 -- DONE ------------------------------------------------------------------------
 - done - html - diff items (function signatures) have a leading space (?)

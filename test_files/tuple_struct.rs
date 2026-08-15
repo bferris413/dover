@@ -1,12 +1,38 @@
-// use cake::cheese;
+use std::io::{Read, Write};
+use tokio::net::TcpListener;
 
-// pub fn build<T: Clone>(i: u32, y: T) -> T
-// where
-//     X: Milk,
-//     V: Cake,
-// {
-//     i
-// }
+enum ApplicationProtocol<T: Clone> {
+    Http { t: T },
+    Https,
+    Stun,
+    Smtp,
+}
+
+pub fn build<T, U, V>(i: u32, y: T) -> T
+where
+    U: Read,
+    V: Write,
+{
+    i
+}
+
+struct RandomStruct {
+    field1: u8,
+    field2: u16,
+    field3: u32,
+}
+impl RandomStruct {
+    fn new(field1: u8, field2: u16, field3: u32) -> Self {
+        Self {
+            field1,
+            field2,
+            field3,
+        }
+    }
+    fn do_it(&self, x: String) {
+        println!("do_it called with x: {}", x);
+    }
+}
 
 // pub fn doit() {
 //     println!("yes");
@@ -21,13 +47,6 @@
 // }
 
 // trait Cake {}
-
-// enum L7Protocol<T: Clone> {
-//     Http { t: T },
-//     Https {},
-//     Stun,
-//     Smtp,
-// }
 // impl SanityCheck {
 //     pub fn rice() -> () {
 //         ()
@@ -83,17 +102,17 @@
 //     field3: V,
 // }
 
-struct UnitToTuple;
-struct TupleToUnit(String);
-struct UnitToFields;
-struct FieldsToUnit {
-    field1: String,
-    field2: u32,
-}
+// struct UnitToTuple;
+// struct TupleToUnit(String);
+// struct UnitToFields;
+// struct FieldsToUnit {
+//     field1: String,
+//     field2: u32,
+// }
 
-struct FieldsToTuple {
-    field1: String,
-    field2: u32,
-}
+// struct FieldsToTuple {
+//     field1: String,
+//     field2: u32,
+// }
 
-struct TupleToFields(String, u32);
+// struct TupleToFields(String, u32);

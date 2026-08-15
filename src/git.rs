@@ -125,13 +125,13 @@ pub fn get_changed_files(
     diff.foreach(
         &mut |delta, _| {
             // Check if the entry is a regular file
+            let is_blob = |mode| matches!(mode, FileMode::Blob | FileMode::BlobExecutable);
             let is_regular_file = match delta.status() {
-                Delta::Added | Delta::Modified | Delta::Deleted => {
-                    let new_file_mode = delta.new_file().mode();
-                    let old_file_mode = delta.old_file().mode();
-
-                    new_file_mode == FileMode::Blob && old_file_mode == FileMode::Blob
+                Delta::Added => is_blob(delta.new_file().mode()),
+                Delta::Modified => {
+                    is_blob(delta.old_file().mode()) && is_blob(delta.new_file().mode())
                 }
+                Delta::Deleted => is_blob(delta.old_file().mode()),
                 _ => false, // Ignore other types of changes
             };
 
@@ -277,14 +277,97 @@ fn get_blob_contents(repo: &Repository, oid: &Oid) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
+    use git2::Signature;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    // #[test]
-    // fn test_get_changed_files() {
-    //     let repo_path = PathBuf::from(".");
-    //     let changed_files = get_changed_files(repo_path, None, None).unwrap();
-    //     for file in changed_files {
-    //         println!("{file}");
-    //     }
-    // }
+    struct TempRepo {
+        path: PathBuf,
+    }
+
+    impl TempRepo {
+        fn new() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("dover-git-test-{unique}"));
+            fs::create_dir(&path).unwrap();
+            Self { path }
+        }
+    }
+
+    impl Drop for TempRepo {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.path).unwrap();
+        }
+    }
+
+    fn commit_all(repo: &Repository, message: &str) -> Oid {
+        let mut index = repo.index().unwrap();
+        index
+            .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
+        index.write().unwrap();
+
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let signature = Signature::now("Dover Tests", "dover@example.com").unwrap();
+        let parents = repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .map(|oid| repo.find_commit(oid).unwrap());
+        let parent_refs = parents.iter().collect::<Vec<_>>();
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message,
+            &tree,
+            &parent_refs,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn includes_added_and_deleted_files() {
+        let temp_repo = TempRepo::new();
+        let repo = Repository::init(&temp_repo.path).unwrap();
+
+        let deleted_contents = "pub struct Deleted;\n";
+        fs::write(temp_repo.path.join("deleted.rs"), deleted_contents).unwrap();
+        let first_commit = commit_all(&repo, "add deleted.rs");
+
+        fs::remove_file(temp_repo.path.join("deleted.rs")).unwrap();
+        let added_contents = "pub struct Added;\n";
+        fs::write(temp_repo.path.join("added.rs"), added_contents).unwrap();
+        let second_commit = commit_all(&repo, "replace deleted.rs with added.rs");
+
+        let changes = get_changed_files(
+            temp_repo.path.clone(),
+            Some(Treeish::new(
+                first_commit.to_string(),
+                Some(second_commit.to_string()),
+            )),
+        )
+        .unwrap();
+
+        assert_eq!(changes.changed_files.len(), 2);
+        assert!(changes.changed_files.iter().any(|file| {
+            file.path.ends_with("added.rs")
+                && matches!(
+                    &file.change_type,
+                    Change::Added { contents } if contents == added_contents
+                )
+        }));
+        assert!(changes.changed_files.iter().any(|file| {
+            file.path.ends_with("deleted.rs")
+                && matches!(
+                    &file.change_type,
+                    Change::Deleted { contents } if contents == deleted_contents
+                )
+        }));
+    }
 }

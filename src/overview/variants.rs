@@ -413,7 +413,7 @@ fn collect_field_diffs(
 
     // It's possible we don't have any diffs and yet the variant has fields.
     // In this case, we should add some visual cue to indicate we elided irrelevant fields.
-    if diffs.is_empty() && variant.original.fields.is_empty() {
+    if diffs.is_empty() && !variant.original.fields.is_empty() {
         let elided_whitespace =
             crate::collect_elided_whitespace(sig_end, source_code, variant_range.end);
         diffs.push((None, Code(elided_whitespace)));
@@ -439,5 +439,47 @@ fn end_index_of_fields(variant: &Variant) -> usize {
         syn::Fields::Named(fields_named) => fields_named.named.span().byte_range().end,
         syn::Fields::Unnamed(fields_unnamed) => fields_unnamed.unnamed.span().byte_range().end,
         syn::Fields::Unit => variant.original.span().byte_range().end,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn variant(source: &str) -> Variant {
+        Variant::new(
+            syn::parse_str(source).unwrap(),
+            SourceFile::from(source.to_string()),
+        )
+    }
+
+    fn old_source(diff: &VariantDiff) -> String {
+        diff.as_viewable().vds[0]
+            .old
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|(_, code)| code.0.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn empty_variant_does_not_receive_an_elision_marker() {
+        let old = variant("Empty");
+        let new = variant("Empty { value: u8 }");
+
+        let diff = old.diff_with(&new).unwrap();
+
+        assert_eq!(old_source(&diff), "Empty");
+    }
+
+    #[test]
+    fn unchanged_variant_fields_are_marked_as_elided() {
+        let old = variant("Http { stable: u8 }");
+        let new = variant("Http { stable: u8, added: u16 }");
+
+        let diff = old.diff_with(&new).unwrap();
+
+        assert_eq!(old_source(&diff), "Http { .. }");
     }
 }
