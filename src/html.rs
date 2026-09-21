@@ -8,6 +8,8 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
         :root {
             --border: #d0d7de;
             --muted-background: #f6f8fa;
+            --file-header-background: #24292f;
+            --section-header-background: #d8dee4;
             --sidebar-width: 18rem;
         }
 
@@ -117,16 +119,18 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
 
         .diffs {
             min-width: 0;
-            padding: 16px;
+            padding: 12px 16px 24px;
         }
 
         .file-diff {
-            margin-bottom: 16px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
+            margin: 0 0 20px;
             background: #fff;
-            overflow: hidden;
-            scroll-margin-top: 16px;
+            scroll-margin-top: 12px;
+        }
+
+        .file-diff + .file-diff {
+            padding-top: 12px;
+            border-top: 1px solid #eaeef2;
         }
 
         .file-diff > summary,
@@ -136,20 +140,29 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
         }
 
         .file-diff > summary {
-            padding: 10px 12px;
-            background: #eef2f8;
+            padding: 5px 7px;
+            color: #f6f8fa;
+            background: var(--file-header-background);
             font-weight: 600;
         }
 
-        .file-diff[open] > summary { border-bottom: 1px solid var(--border); }
-        .diff-section + .diff-section { border-top: 1px solid var(--border); }
+        .diff-section { margin-top: 4px; }
 
         .diff-section > summary {
-            padding: 7px 12px;
-            background: #fafbfc;
+            padding: 4px 7px;
+            color: #24292f;
+            background: var(--section-header-background);
+            font-weight: 600;
         }
 
-        .diff-section[open] > summary { border-bottom: 1px solid var(--border); }
+        .file-diff > summary:hover { background: #32383f; }
+        .diff-section > summary:hover { background: #c7cdd4; }
+
+        .file-diff > summary:focus-visible,
+        .diff-section > summary:focus-visible {
+            outline: 1px solid #0969da;
+            outline-offset: 1px;
+        }
 
         .diff-table-wrap {
             width: 100%;
@@ -165,21 +178,32 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
         .diff-table td { width: 50%; }
 
         .diff-table td {
-            padding: 8px 12px;
-            border-right: 1px solid var(--border);
+            position: relative;
+            padding: 3px 7px;
             vertical-align: top;
             background: #fff;
+            line-height: 1.35;
             transition: background-color 80ms ease;
         }
 
-        .diff-table td:last-child { border-right: 0; }
+        .diff-table td + td { border-left: 1px solid #eef0f2; }
         .diff-table td.empty-content { background: #fdfdfd; }
 
         .diff-table tr.diff-item:hover td { background: #f6f8fa; }
         .diff-table tr.diff-item:hover td.empty-content { background: #f3f4f6; }
 
-        .diff-cell.deleted-cell { box-shadow: inset 3px 0 #cf222e; }
-        .diff-cell.added-cell { box-shadow: inset 3px 0 #1a7f37; }
+        .diff-cell::before {
+            position: absolute;
+            top: 3px;
+            bottom: 3px;
+            left: 0;
+            width: 2px;
+            border-radius: 999px;
+            content: "";
+        }
+
+        .diff-cell.deleted-cell::before { background: #cf222e; }
+        .diff-cell.added-cell::before { background: #1a7f37; }
 
         .diff-cell-scroll {
             width: 100%;
@@ -287,6 +311,7 @@ mod tests {
         assert!(HTML_BOILERPLATE.contains("table-layout: fixed"));
         assert!(HTML_BOILERPLATE.contains("class=\"sidebar-toggle\""));
         assert!(HTML_BOILERPLATE.contains("overflow-x: auto"));
+        assert!(HTML_BOILERPLATE.contains(".diff-cell::before"));
         assert!(HTML_BOILERPLATE.contains("<main class=\"diffs\">"));
         assert!(HTML_EPILOGUE.ends_with("</html>"));
     }
