@@ -77,31 +77,30 @@ impl ViewableDiffs {
             return;
         }
 
-        let mut collapsed_old = Vec::new();
-        let mut collapsed_new = Vec::new();
-
-        for diff in self.vds.iter_mut() {
-            if let Some(ref mut old) = diff.old {
-                push_collapse_separator(&mut collapsed_old);
-                collapsed_old.append(old);
+        let mut old_items = Vec::new();
+        let mut new_items = Vec::new();
+        for diff in &mut self.vds {
+            if let Some(old) = diff.old.take() {
+                old_items.push(old);
             }
-            if let Some(ref mut new) = diff.new {
-                push_collapse_separator(&mut collapsed_new);
-                collapsed_new.append(new);
+            if let Some(new) = diff.new.take() {
+                new_items.push(new);
             }
         }
+        let mut old_items = old_items.into_iter();
+        let mut new_items = new_items.into_iter();
+        let mut aligned = Vec::new();
 
-        let mut old = None;
-        let mut new = None;
-
-        if !collapsed_old.is_empty() {
-            old = Some(collapsed_old);
+        loop {
+            let old = old_items.next();
+            let new = new_items.next();
+            if old.is_none() && new.is_none() {
+                break;
+            }
+            aligned.push(ViewableDiff { old, new });
         }
-        if !collapsed_new.is_empty() {
-            new = Some(collapsed_new);
-        }
 
-        self.vds = vec![ViewableDiff { old, new }];
+        self.vds = aligned;
     }
 
     fn to_terminal(&self) -> String {
@@ -110,15 +109,6 @@ impl ViewableDiffs {
             .filter_map(ViewableDiff::to_terminal)
             .collect::<Vec<_>>()
             .join("\n")
-    }
-}
-
-fn push_collapse_separator(collapsed: &mut Vec<(Option<ExistenceChange>, Code)>) {
-    if collapsed
-        .last()
-        .is_some_and(|(_, code)| !code.0.ends_with('\n'))
-    {
-        collapsed.push((None, Code("\n".to_string())));
     }
 }
 
@@ -422,7 +412,7 @@ impl Html for ViewableDiffs {
         let mut html = String::new();
 
         for vd in self.vds.iter() {
-            html.push_str("<tr>");
+            html.push_str("<tr class=\"diff-item\">");
 
             let mut deleted_content = String::new();
             if let Some(ref old) = vd.old {
@@ -443,7 +433,7 @@ impl Html for ViewableDiffs {
                 html.push_str("<td class=\"empty-content\">");
                 html.push_str("</td>");
             } else {
-                html.push_str("<td>");
+                html.push_str("<td class=\"diff-cell deleted-cell\">");
                 html.push_str("<div class=\"diff-cell-scroll\"><pre><code>");
                 html.push_str(&deleted_content);
                 html.push_str("</code></pre></div>");
@@ -470,7 +460,7 @@ impl Html for ViewableDiffs {
                 html.push_str("<td class=\"empty-content\">");
                 html.push_str("</td>");
             } else {
-                html.push_str("<td>");
+                html.push_str("<td class=\"diff-cell added-cell\">");
                 html.push_str("<div class=\"diff-cell-scroll\"><pre><code>");
                 html.push_str(&added_content);
                 html.push_str("</code></pre></div>");
@@ -1487,11 +1477,14 @@ impl RandomStruct {
         assert_eq!(
             view.to_html(),
             concat!(
-                "<tr><td><div class=\"diff-cell-scroll\"><pre><code>",
+                "<tr class=\"diff-item\">",
+                "<td class=\"diff-cell deleted-cell\">",
+                "<div class=\"diff-cell-scroll\"><pre><code>",
                 "<span class=\"\">Result&lt;</span>",
                 "<span class=\"deleted\">A &amp; B</span>",
                 "</code></pre></div></td>",
-                "<td><div class=\"diff-cell-scroll\"><pre><code>",
+                "<td class=\"diff-cell added-cell\">",
+                "<div class=\"diff-cell-scroll\"><pre><code>",
                 "<span class=\"\">Result&lt;</span>",
                 "<span class=\"added\">A &gt; B</span>",
                 "</code></pre></div></td></tr>"
@@ -1519,8 +1512,9 @@ impl RandomStruct {
         assert_eq!(
             addition.to_html(),
             concat!(
-                "<tr><td class=\"empty-content\"></td>",
-                "<td><div class=\"diff-cell-scroll\"><pre><code>",
+                "<tr class=\"diff-item\"><td class=\"empty-content\"></td>",
+                "<td class=\"diff-cell added-cell\">",
+                "<div class=\"diff-cell-scroll\"><pre><code>",
                 "<span class=\"added\">struct Added;</span>",
                 "</code></pre></div></td></tr>"
             )
@@ -1528,7 +1522,8 @@ impl RandomStruct {
         assert_eq!(
             deletion.to_html(),
             concat!(
-                "<tr><td><div class=\"diff-cell-scroll\"><pre><code>",
+                "<tr class=\"diff-item\"><td class=\"diff-cell deleted-cell\">",
+                "<div class=\"diff-cell-scroll\"><pre><code>",
                 "<span class=\"deleted\">struct Removed;</span>",
                 "</code></pre></div></td><td class=\"empty-content\"></td></tr>"
             )
@@ -1536,10 +1531,20 @@ impl RandomStruct {
     }
 
     #[test]
-    fn html_renderer_does_not_double_space_collapsed_uses() {
+    fn html_renderer_preserves_collapsed_item_boundaries_without_extra_space() {
         let html = diff("use alpha::A;\nuse beta::B;\n", "").to_html();
 
         assert!(!html.contains("<span class=\"\">\n</span>"), "{html}");
+        assert_eq!(html.matches("<tr class=\"diff-item\">").count(), 2);
+    }
+
+    #[test]
+    fn html_renderer_gives_changed_functions_separate_visual_items() {
+        let before = "fn first() {}\nfn second(value: u8) {}\n";
+        let html = diff(before, "").to_html();
+
+        assert_eq!(html.matches("<tr class=\"diff-item\">").count(), 2);
+        assert_eq!(html.matches("deleted-cell").count(), 2);
     }
 
     #[test]

@@ -167,14 +167,19 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
         .diff-table td {
             padding: 8px 12px;
             border-right: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
             vertical-align: top;
             background: #fff;
+            transition: background-color 80ms ease;
         }
 
-        .diff-table tr:last-child td { border-bottom: 0; }
         .diff-table td:last-child { border-right: 0; }
         .diff-table td.empty-content { background: #fdfdfd; }
+
+        .diff-table tr.diff-item:hover td { background: #f6f8fa; }
+        .diff-table tr.diff-item:hover td.empty-content { background: #f3f4f6; }
+
+        .diff-cell.deleted-cell { box-shadow: inset 3px 0 #cf222e; }
+        .diff-cell.added-cell { box-shadow: inset 3px 0 #1a7f37; }
 
         .diff-cell-scroll {
             width: 100%;
