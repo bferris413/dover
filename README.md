@@ -37,6 +37,51 @@ the two committed trees.
 
 See `dover --help` for all supported commands.
 
+# Configuration
+
+Dover reads `dover.toml` from the platform-specific configuration directory. If the file does not
+exist, all supported elements are shown by default. Create a complete config containing every
+available setting with:
+
+```sh
+dover config init
+```
+
+Open the config in your preferred editor with:
+
+```sh
+dover config edit
+```
+
+The editor is selected using Git's precedence: `GIT_EDITOR`, Git's `core.editor` setting, `VISUAL`,
+then `EDITOR`. Dover falls back to `vi` on macOS and Linux or Notepad on Windows. The command creates
+a default config before opening it if necessary.
+
+Each element can be shown or hidden independently:
+
+```toml
+[uses]
+show = true
+
+[structs]
+show = true
+
+[enums]
+show = true
+
+[traits]
+show = true
+
+[functions]
+show = true
+
+[impls]
+show = true
+```
+
+Missing sections and missing `show` settings default to `true`. Dover reports unknown settings as
+configuration errors so that misspellings do not silently change behavior.
+
 # ✅ TODO
 - [X] structs
 - [X] enums
@@ -55,7 +100,7 @@ See `dover --help` for all supported commands.
   - [ ] macro
   - [ ] type declarations
 - [ ] attributes
-- [ ] user config (`dover.toml`)
+- [X] user config (`dover.toml`)
 
 # FAQ
 #### Q: What's the intended use case?

@@ -26,11 +26,11 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
 
         .page {
             display: grid;
-            grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+            grid-template-columns: clamp(180px, var(--sidebar-width), calc(100vw - 240px)) minmax(0, 1fr);
             min-height: 100vh;
         }
 
-        .page.sidebar-collapsed { --sidebar-width: 44px; }
+        .page.sidebar-collapsed { grid-template-columns: 44px minmax(0, 1fr); }
         .page.sidebar-empty { display: block; }
 
         .sidebar {
@@ -41,6 +41,39 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
             padding: 16px 12px;
             border-right: 1px solid var(--border);
             background: var(--muted-background);
+        }
+
+        .sidebar-resizer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 7px;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            cursor: col-resize;
+            touch-action: none;
+        }
+
+        .sidebar-resizer::after {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 2px;
+            background: transparent;
+            content: "";
+        }
+
+        .sidebar-resizer:hover::after,
+        .sidebar-resizer:focus-visible::after,
+        body.sidebar-resizing .sidebar-resizer::after { background: #0969da; }
+
+        body.sidebar-resizing,
+        body.sidebar-resizing * {
+            cursor: col-resize !important;
+            user-select: none !important;
         }
 
         .sidebar-title {
@@ -83,9 +116,8 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
 
         .sidebar-collapsed .sidebar-header { padding: 0; }
         .sidebar-collapsed .sidebar-title,
-        .sidebar-collapsed .sidebar nav { display: none; }
-        .sidebar-collapsed .sidebar-toggle { transform: rotate(180deg); }
-
+        .sidebar-collapsed .sidebar nav,
+        .sidebar-collapsed .sidebar-resizer { display: none; }
         .file-tree,
         .file-tree ul {
             margin: 0;
@@ -224,6 +256,7 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
                 border-right: 0;
                 border-bottom: 1px solid var(--border);
             }
+            .sidebar-resizer { display: none; }
         }
     </style>
     <script>
@@ -233,11 +266,54 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
             const directories = new Map([["", tree]]);
             const page = document.querySelector(".page");
             const sidebarToggle = document.querySelector(".sidebar-toggle");
+            const sidebarResizer = document.querySelector(".sidebar-resizer");
+
+            const setSidebarWidth = (requestedWidth) => {
+                const minimumWidth = 180;
+                const maximumWidth = Math.max(minimumWidth, window.innerWidth - 240);
+                const width = Math.min(maximumWidth, Math.max(minimumWidth, requestedWidth));
+                document.documentElement.style.setProperty("--sidebar-width", `${width}px`);
+                sidebarResizer.setAttribute("aria-valuenow", String(Math.round(width)));
+                sidebarResizer.setAttribute("aria-valuemax", String(maximumWidth));
+            };
+
+            sidebarResizer.addEventListener("pointerdown", (event) => {
+                if (page.classList.contains("sidebar-collapsed")) return;
+                event.preventDefault();
+                sidebarResizer.setPointerCapture(event.pointerId);
+                document.body.classList.add("sidebar-resizing");
+                setSidebarWidth(event.clientX - page.getBoundingClientRect().left);
+            });
+
+            sidebarResizer.addEventListener("pointermove", (event) => {
+                if (sidebarResizer.hasPointerCapture(event.pointerId)) {
+                    setSidebarWidth(event.clientX - page.getBoundingClientRect().left);
+                }
+            });
+
+            const stopSidebarResize = (event) => {
+                if (sidebarResizer.hasPointerCapture(event.pointerId)) {
+                    sidebarResizer.releasePointerCapture(event.pointerId);
+                }
+                document.body.classList.remove("sidebar-resizing");
+            };
+            sidebarResizer.addEventListener("pointerup", stopSidebarResize);
+            sidebarResizer.addEventListener("pointercancel", stopSidebarResize);
+            sidebarResizer.addEventListener("keydown", (event) => {
+                const currentWidth = document.querySelector(".sidebar").getBoundingClientRect().width;
+                if (event.key === "ArrowLeft") setSidebarWidth(currentWidth - 10);
+                else if (event.key === "ArrowRight") setSidebarWidth(currentWidth + 10);
+                else if (event.key === "Home") setSidebarWidth(180);
+                else if (event.key === "End") setSidebarWidth(window.innerWidth - 240);
+                else return;
+                event.preventDefault();
+            });
 
             sidebarToggle.addEventListener("click", () => {
                 const collapsed = page.classList.toggle("sidebar-collapsed");
                 sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
                 sidebarToggle.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+                sidebarToggle.textContent = collapsed ? "❯❯" : "❮";
             });
 
             files.forEach((file, index) => {
@@ -256,7 +332,7 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
                         const children = document.createElement("ul");
                         details.className = "tree-directory";
                         details.open = true;
-                        summary.textContent = part;
+                        summary.textContent = `${part}/`;
                         details.append(summary, children);
                         item.append(details);
                         parent.append(item);
@@ -291,6 +367,7 @@ pub const HTML_BOILERPLATE: &str = r#"<!DOCTYPE html>
             <button class="sidebar-toggle" type="button" aria-label="Toggle sidebar" aria-expanded="true" title="Collapse sidebar">❮</button>
         </header>
         <nav aria-label="Changed files"><ul class="file-tree" id="file-tree"></ul></nav>
+        <div class="sidebar-resizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin="180" aria-valuenow="288" tabindex="0"></div>
     </aside>
     <main class="diffs">
 "#;
@@ -310,6 +387,8 @@ mod tests {
         assert!(HTML_BOILERPLATE.contains(".file-diff[data-file-path]"));
         assert!(HTML_BOILERPLATE.contains("table-layout: fixed"));
         assert!(HTML_BOILERPLATE.contains("class=\"sidebar-toggle\""));
+        assert!(HTML_BOILERPLATE.contains("class=\"sidebar-resizer\""));
+        assert!(HTML_BOILERPLATE.contains("setPointerCapture"));
         assert!(HTML_BOILERPLATE.contains("overflow-x: auto"));
         assert!(HTML_BOILERPLATE.contains(".diff-cell::before"));
         assert!(HTML_BOILERPLATE.contains("<main class=\"diffs\">"));

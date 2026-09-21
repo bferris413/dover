@@ -17,10 +17,12 @@ use syn::{ItemUse, Visibility};
 use overview::structs::{Struct, Structs, StructsDiff};
 use overview::uses::{self, Uses, UsesDiff};
 
+mod config;
 mod git;
 mod html;
 mod overview;
 
+pub use config::Config;
 pub use git::{Change as GitChange, ChangedFile, Treeish, get_changed_files};
 pub use html::{HTML_BOILERPLATE, HTML_EPILOGUE};
 
@@ -415,10 +417,14 @@ impl Html for ViewableDiffs {
             html.push_str("<tr class=\"diff-item\">");
 
             let mut deleted_content = String::new();
+            let mut has_deleted_content = false;
             if let Some(ref old) = vd.old {
                 for diff in old.iter() {
                     let class = match diff.0 {
-                        Some(ExistenceChange::Deleted) => "deleted",
+                        Some(ExistenceChange::Deleted) => {
+                            has_deleted_content = true;
+                            "deleted"
+                        }
                         Some(ExistenceChange::Added) => unreachable!(),
                         None => "",
                     };
@@ -429,7 +435,7 @@ impl Html for ViewableDiffs {
                     ));
                 }
             }
-            if deleted_content.is_empty() {
+            if !has_deleted_content {
                 html.push_str("<td class=\"empty-content\">");
                 html.push_str("</td>");
             } else {
@@ -441,12 +447,16 @@ impl Html for ViewableDiffs {
             }
 
             let mut added_content = String::new();
+            let mut has_added_content = false;
 
             if let Some(ref new) = vd.new {
                 for diff in new.iter() {
                     let class = match diff.0 {
                         Some(ExistenceChange::Deleted) => unreachable!(),
-                        Some(ExistenceChange::Added) => "added",
+                        Some(ExistenceChange::Added) => {
+                            has_added_content = true;
+                            "added"
+                        }
                         None => "",
                     };
                     added_content.push_str(&format!(
@@ -456,7 +466,7 @@ impl Html for ViewableDiffs {
                     ));
                 }
             }
-            if added_content.is_empty() {
+            if !has_added_content {
                 html.push_str("<td class=\"empty-content\">");
                 html.push_str("</td>");
             } else {
@@ -742,9 +752,21 @@ impl OverviewDiff {
             && self.functions_diff.is_empty()
             && self.impls_diff.is_empty()
     }
-}
-impl Html for OverviewDiff {
-    fn to_html(&self) -> String {
+
+    pub fn has_visible_changes(&self, config: &Config) -> bool {
+        (config.uses.show && !self.uses_diff.is_empty())
+            || (config.structs.show && !self.structs_diff.is_empty())
+            || (config.enums.show && !self.enums_diff.is_empty())
+            || (config.traits.show && !self.traits_diff.is_empty())
+            || (config.functions.show && !self.functions_diff.is_empty())
+            || (config.impls.show && !self.impls_diff.is_empty())
+    }
+
+    pub fn to_html_with_config(&self, config: &Config) -> String {
+        if !self.has_visible_changes(config) {
+            return String::new();
+        }
+
         let fp1 = self.file1.to_string_lossy();
         let fp2 = self.file2.to_string_lossy();
         let label = if fp1 == fp2 {
@@ -771,33 +793,32 @@ impl Html for OverviewDiff {
             html.push_str("</tbody></table></div></details>");
         }
 
-        let viewable_uses = self.uses_diff.as_viewable();
-        render_section(&mut html, "Uses", &viewable_uses);
-
-        let viewable_structs = self.structs_diff.as_viewable();
-        render_section(&mut html, "Structs", &viewable_structs);
-
-        let viewable_enums = self.enums_diff.as_viewable();
-        render_section(&mut html, "Enums", &viewable_enums);
-
-        let viewable_traits = self.traits_diff.as_viewable();
-        render_section(&mut html, "Traits", &viewable_traits);
-
-        let viewable_functions = self.functions_diff.as_viewable();
-        render_section(&mut html, "Functions", &viewable_functions);
-
-        let viewable_impls = self.impls_diff.as_viewable();
-        render_section(&mut html, "Impls", &viewable_impls);
+        if config.uses.show {
+            render_section(&mut html, "Uses", &self.uses_diff.as_viewable());
+        }
+        if config.structs.show {
+            render_section(&mut html, "Structs", &self.structs_diff.as_viewable());
+        }
+        if config.enums.show {
+            render_section(&mut html, "Enums", &self.enums_diff.as_viewable());
+        }
+        if config.traits.show {
+            render_section(&mut html, "Traits", &self.traits_diff.as_viewable());
+        }
+        if config.functions.show {
+            render_section(&mut html, "Functions", &self.functions_diff.as_viewable());
+        }
+        if config.impls.show {
+            render_section(&mut html, "Impls", &self.impls_diff.as_viewable());
+        }
 
         html.push_str("</details>");
         html
     }
-}
 
-impl Display for OverviewDiff {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.all_empty() {
-            return Ok(());
+    pub fn to_terminal_with_config(&self, config: &Config) -> String {
+        if !self.has_visible_changes(config) {
+            return String::new();
         }
 
         let fp1 = &self.file1.to_str().unwrap();
@@ -810,8 +831,8 @@ impl Display for OverviewDiff {
         let mut sections = Vec::new();
 
         macro_rules! render_section {
-            ($title:literal, $diff:expr) => {
-                if !$diff.is_empty() {
+            ($show:expr, $title:literal, $diff:expr) => {
+                if $show && !$diff.is_empty() {
                     let view = $diff.as_viewable();
                     sections.push(format!(
                         "{}\n{}",
@@ -822,14 +843,25 @@ impl Display for OverviewDiff {
             };
         }
 
-        render_section!("Uses", self.uses_diff);
-        render_section!("Structs", self.structs_diff);
-        render_section!("Enums", self.enums_diff);
-        render_section!("Traits", self.traits_diff);
-        render_section!("Functions", self.functions_diff);
-        render_section!("Impls", self.impls_diff);
+        render_section!(config.uses.show, "Uses", self.uses_diff);
+        render_section!(config.structs.show, "Structs", self.structs_diff);
+        render_section!(config.enums.show, "Enums", self.enums_diff);
+        render_section!(config.traits.show, "Traits", self.traits_diff);
+        render_section!(config.functions.show, "Functions", self.functions_diff);
+        render_section!(config.impls.show, "Impls", self.impls_diff);
 
-        write!(f, "{}\n{}", header.bold().reversed(), sections.join("\n\n"))
+        format!("{}\n{}", header.bold().reversed(), sections.join("\n\n"))
+    }
+}
+impl Html for OverviewDiff {
+    fn to_html(&self) -> String {
+        self.to_html_with_config(&Config::default())
+    }
+}
+
+impl Display for OverviewDiff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.to_terminal_with_config(&Config::default()))
     }
 }
 
@@ -1531,6 +1563,31 @@ impl RandomStruct {
     }
 
     #[test]
+    fn html_renderer_does_not_treat_unchanged_context_as_a_removed_item() {
+        let addition_with_context = ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(vec![(None, Code("enum Command { .. }".to_owned()))]),
+            new: Some(vec![
+                (None, Code("enum Command { .. ".to_owned())),
+                (Some(ExistenceChange::Added), Code("Config".to_owned())),
+                (None, Code(" }".to_owned())),
+            ]),
+        }]);
+
+        assert_eq!(
+            addition_with_context.to_html(),
+            concat!(
+                "<tr class=\"diff-item\"><td class=\"empty-content\"></td>",
+                "<td class=\"diff-cell added-cell\">",
+                "<div class=\"diff-cell-scroll\"><pre><code>",
+                "<span class=\"\">enum Command { .. </span>",
+                "<span class=\"added\">Config</span>",
+                "<span class=\"\"> }</span>",
+                "</code></pre></div></td></tr>"
+            )
+        );
+    }
+
+    #[test]
     fn html_renderer_preserves_collapsed_item_boundaries_without_extra_space() {
         let html = diff("use alpha::A;\nuse beta::B;\n", "").to_html();
 
@@ -1548,12 +1605,13 @@ impl RandomStruct {
     }
 
     #[test]
-    fn html_renderer_elides_unchanged_impl_items_on_both_sides() {
+    fn html_renderer_omits_an_unchanged_side_of_an_impl_diff() {
         let before = "impl Widget { fn kept(&self) {} fn removed(&self) {} }";
         let after = "impl Widget { fn kept(&self) {} }";
         let html = diff(before, after).to_html();
 
-        assert_eq!(html.matches("..</span>").count(), 2, "{html}");
+        assert_eq!(html.matches("..</span>").count(), 1, "{html}");
+        assert_eq!(html.matches("empty-content").count(), 1, "{html}");
     }
 
     #[test]
@@ -1599,6 +1657,38 @@ impl Record { fn method(&mut self, value: u8) {} }
         assert!(html.ends_with("</details>"));
         assert!(html.contains("<span class=\"deleted\">"));
         assert!(html.contains("<span class=\"added\">"));
+    }
+
+    #[test]
+    fn config_hides_sections_in_terminal_and_html_output() {
+        let overview_diff = diff(
+            "struct Record { old: u8 }\nenum Choice { Old }",
+            "struct Record { new: u8 }\nenum Choice { New }",
+        );
+        let mut config = Config::default();
+        config.enums.show = false;
+
+        let html = overview_diff.to_html_with_config(&config);
+        let terminal = with_colors(false, || overview_diff.to_terminal_with_config(&config));
+
+        assert!(html.contains("<summary>Structs</summary>"), "{html}");
+        assert!(!html.contains("<summary>Enums</summary>"), "{html}");
+        assert!(terminal.contains("Structs"), "{terminal}");
+        assert!(!terminal.contains("Enums"), "{terminal}");
+    }
+
+    #[test]
+    fn config_suppresses_files_with_only_hidden_changes() {
+        let overview_diff = diff("enum Choice { Old }", "enum Choice { New }");
+        let mut config = Config::default();
+        config.enums.show = false;
+
+        assert!(!overview_diff.has_visible_changes(&config));
+        assert_eq!(overview_diff.to_html_with_config(&config), "");
+        assert_eq!(
+            with_colors(false, || overview_diff.to_terminal_with_config(&config)),
+            ""
+        );
     }
 
     #[test]

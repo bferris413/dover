@@ -3,9 +3,10 @@ use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, crate_version};
-use dover::{Diff, GitChange, HTML_BOILERPLATE, HTML_EPILOGUE, Html, Overview, Treeish};
+use dover::{Config, Diff, GitChange, HTML_BOILERPLATE, HTML_EPILOGUE, Overview, Treeish};
+use editor_command::EditorBuilder;
 
 #[derive(Debug, Parser)]
 #[command(author, version = crate_version!(), about = "Diff OVERview - summarize git diffs of Rust code")]
@@ -41,9 +42,22 @@ enum Command {
     },
     /// Diff two files
     Files { file1: PathBuf, file2: PathBuf },
+    /// Manage Dover's configuration
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
     // Overview {
     //     files: Vec<PathBuf>,
     // },
+}
+
+#[derive(Debug, Subcommand)]
+enum ConfigCommand {
+    /// Create a config file containing all available settings
+    Init,
+    /// Open the config file in the configured editor
+    Edit,
 }
 
 fn main() -> Result<()> {
@@ -54,19 +68,87 @@ fn main() -> Result<()> {
         Command::Diff {
             revision1,
             revision2,
-        } => run_diff(
-            Command::Diff {
-                revision1,
-                revision2,
-            },
-            output,
-        ),
-        Command::Files { file1, file2 } => run_files(Command::Files { file1, file2 }, output),
-        // Command::Overview { files } => run_overview(Command::Overview { files }, &output),
+        } => {
+            let config = Config::load()?;
+            run_diff(
+                Command::Diff {
+                    revision1,
+                    revision2,
+                },
+                output,
+                &config,
+            )
+        }
+        Command::Files { file1, file2 } => {
+            let config = Config::load()?;
+            run_files(Command::Files { file1, file2 }, output, &config)
+        }
+        Command::Config {
+            command: ConfigCommand::Init,
+        } => {
+            let path = Config::init()?;
+            println!("Created config at {}", path.display());
+            Ok(())
+        }
+        Command::Config {
+            command: ConfigCommand::Edit,
+        } => {
+            let path = Config::ensure_exists()?;
+            open_in_editor(&path)
+        }
     }
 }
 
-fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
+fn open_in_editor(path: &std::path::Path) -> Result<()> {
+    let editor = EditorBuilder::new()
+        .string(git_editor_command())
+        .string(non_empty_env("VISUAL"))
+        .string(non_empty_env("EDITOR"))
+        .string(Some(platform_default_editor()))
+        .build()
+        .context("Error parsing the configured editor command")?;
+
+    let status = editor
+        .open(path)
+        .status()
+        .with_context(|| format!("Error opening config at {}", path.display()))?;
+    if !status.success() {
+        bail!("Editor exited with {status}");
+    }
+    Ok(())
+}
+
+fn git_editor_command() -> Option<String> {
+    non_empty_env("GIT_EDITOR").or_else(|| {
+        let output = ProcessCommand::new("git")
+            .args(["config", "--get", "core.editor"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+
+        let editor = String::from_utf8(output.stdout).ok()?;
+        let editor = editor.trim();
+        (!editor.is_empty()).then(|| editor.to_owned())
+    })
+}
+
+fn non_empty_env(name: &str) -> Option<String> {
+    env::var(name).ok().filter(|value| !value.trim().is_empty())
+}
+
+#[cfg(target_os = "windows")]
+fn platform_default_editor() -> &'static str {
+    "notepad.exe"
+}
+
+#[cfg(not(target_os = "windows"))]
+fn platform_default_editor() -> &'static str {
+    "vi"
+}
+
+fn run_diff(command: Command, output: OutputFormat, config: &Config) -> Result<()> {
     let Command::Diff {
         revision1,
         revision2,
@@ -102,8 +184,8 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
                     Overview::try_from((path, after_contents)).context("Error getting overview")?;
 
                 let overview_diff = overview1.diff_with(&overview2);
-                if !overview_diff.all_empty() {
-                    append_diff(&mut rendered, &overview_diff, output);
+                if overview_diff.has_visible_changes(config) {
+                    append_diff(&mut rendered, &overview_diff, output, config);
                 }
             }
             GitChange::Added { contents } => {
@@ -113,8 +195,8 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
                     Overview::try_from((path, contents)).context("Error getting overview")?;
 
                 let overview_diff = overview1.diff_with(&overview2);
-                if !overview_diff.all_empty() {
-                    append_diff(&mut rendered, &overview_diff, output);
+                if overview_diff.has_visible_changes(config) {
+                    append_diff(&mut rendered, &overview_diff, output, config);
                 }
             }
             GitChange::Deleted { contents } => {
@@ -124,8 +206,8 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
                     Overview::try_from((path, "".to_string())).context("Error getting overview")?;
 
                 let overview_diff = overview1.diff_with(&overview2);
-                if !overview_diff.all_empty() {
-                    append_diff(&mut rendered, &overview_diff, output);
+                if overview_diff.has_visible_changes(config) {
+                    append_diff(&mut rendered, &overview_diff, output, config);
                 }
             }
         }
@@ -139,7 +221,7 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
     Ok(())
 }
 
-fn run_files(c: Command, output: OutputFormat) -> Result<()> {
+fn run_files(c: Command, output: OutputFormat, config: &Config) -> Result<()> {
     let Command::Files { file1, file2 } = c else {
         unreachable!();
     };
@@ -150,10 +232,10 @@ fn run_files(c: Command, output: OutputFormat) -> Result<()> {
     let file_diff = overview1.diff_with(&overview2);
 
     let rendered = match output {
-        OutputFormat::Plain => file_diff.to_string(),
+        OutputFormat::Plain => file_diff.to_terminal_with_config(config),
         OutputFormat::Html => {
             let mut html = HTML_BOILERPLATE.to_string();
-            html.push_str(&file_diff.to_html());
+            html.push_str(&file_diff.to_html_with_config(config));
             html.push_str(HTML_EPILOGUE);
             html
         }
@@ -163,13 +245,18 @@ fn run_files(c: Command, output: OutputFormat) -> Result<()> {
     Ok(())
 }
 
-fn append_diff(rendered: &mut String, diff: &dover::OverviewDiff, output: OutputFormat) {
+fn append_diff(
+    rendered: &mut String,
+    diff: &dover::OverviewDiff,
+    output: OutputFormat,
+    config: &Config,
+) {
     if !rendered.is_empty() && matches!(output, OutputFormat::Plain) {
         rendered.push_str("\n\n");
     }
     match output {
-        OutputFormat::Plain => rendered.push_str(&diff.to_string()),
-        OutputFormat::Html => rendered.push_str(&diff.to_html()),
+        OutputFormat::Plain => rendered.push_str(&diff.to_terminal_with_config(config)),
+        OutputFormat::Html => rendered.push_str(&diff.to_html_with_config(config)),
     }
 }
 
