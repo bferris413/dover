@@ -409,7 +409,7 @@ fn collect_impl_diff_changes(
     source_code: &[u8],
     source_map: &[Range<usize>],
     change_for_diffs: ExistenceChange,
-    maybe_change_for_diffs: Option<ExistenceChange>,
+    impl_existence_change: Option<ExistenceChange>,
     items_diff: &Option<ImplItemsDiff>,
 ) -> Vec<(Option<ExistenceChange>, Code)> {
     let impl_range = impl_.span().byte_range();
@@ -417,13 +417,19 @@ fn collect_impl_diff_changes(
     let sig_end = impl_.brace_token.span.span().byte_range().start + 1; // we'll take the "{"
     let items_end = end_index_of_items(impl_, source_code);
 
-    let mut diff_changes = crate::collect_diff_changes(
-        source_code,
-        source_map,
-        decl_start,
-        sig_end,
-        change_for_diffs,
-    );
+    let mut diff_changes = if let Some(ex) = impl_existence_change {
+        let declaration = String::from_utf8(source_code[decl_start..sig_end].to_vec())
+            .expect("Off a code boundary");
+        vec![(Some(ex), Code(declaration))]
+    } else {
+        crate::collect_diff_changes(
+            source_code,
+            source_map,
+            decl_start,
+            sig_end,
+            change_for_diffs,
+        )
+    };
 
     if let Some(ids) = items_diff {
         let (get_orig_item, get_sub_diff): (
@@ -455,7 +461,7 @@ fn collect_impl_diff_changes(
     let code = String::from_utf8(source_code[items_end..impl_range.end].to_vec())
         .expect("Off a code boundary");
 
-    diff_changes.push((maybe_change_for_diffs, Code(code)));
+    diff_changes.push((impl_existence_change, Code(code)));
     diff_changes
 }
 
@@ -477,7 +483,13 @@ fn collect_item_diffs(
     let mut diffs = Vec::new();
     let impl_range = impl_.span().byte_range();
 
-    if impl_.items.len() > ids.len() {
+    let changed_item_count = ids
+        .fns_diff
+        .diffs()
+        .iter()
+        .filter(|diff| get_original_item(diff).is_some())
+        .count();
+    if impl_.items.len() > changed_item_count {
         let elided_whitespace =
             crate::collect_elided_whitespace(sig_end, source_code, impl_range.end);
         diffs.push((None, Code(elided_whitespace)));

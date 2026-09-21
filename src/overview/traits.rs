@@ -413,7 +413,12 @@ fn collect_item_diff_changes(
     let mut i = sig_end;
     let trait_range = trait_.span().byte_range();
 
-    if trait_.items.len() > tids.len() {
+    let changed_item_count = tids
+        .diffs()
+        .iter()
+        .filter(|diff| get_original_item(diff).is_some())
+        .count();
+    if trait_.items.len() > changed_item_count {
         let elided_whitespace =
             crate::collect_elided_whitespace(sig_end, source_code, trait_range.end);
         diffs.push((None, Code(elided_whitespace)));
@@ -483,9 +488,6 @@ pub struct TraitItemsDiff {
 impl TraitItemsDiff {
     pub fn diffs(&self) -> &[FunctionDiff] {
         self.fns_diff.diffs()
-    }
-    pub fn len(&self) -> usize {
-        self.fns_diff.diffs().len()
     }
 }
 impl ByteRange for TraitItemsDiff {

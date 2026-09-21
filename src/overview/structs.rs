@@ -346,7 +346,12 @@ fn collect_field_diffs(
     let mut i = sig_end;
     let struct_range = struct_.span().byte_range();
 
-    if struct_.fields.len() > fds.len() {
+    let changed_field_count = fds
+        .diffs()
+        .iter()
+        .filter(|diff| get_original_field(diff).is_some())
+        .count();
+    if struct_.fields.len() > changed_field_count {
         let elided_whitespace =
             crate::collect_elided_whitespace(sig_end, source_code, struct_range.end);
         diffs.push((None, Code(elided_whitespace)));

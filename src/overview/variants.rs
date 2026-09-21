@@ -115,9 +115,6 @@ impl VariantDiffs {
     pub fn diffs(&self) -> &[VariantDiff] {
         &self.diffs
     }
-    pub fn len(&self) -> usize {
-        self.diffs.len()
-    }
 }
 impl View for VariantDiffs {
     fn as_viewable(&self) -> ViewableDiffs {
@@ -372,7 +369,12 @@ fn collect_field_diffs(
     let mut i = sig_end;
     let variant_range = variant.original.span().byte_range();
 
-    if variant.original.fields.len() > fds.len() {
+    let changed_field_count = fds
+        .diffs()
+        .iter()
+        .filter(|diff| get_original_field(diff).is_some())
+        .count();
+    if variant.original.fields.len() > changed_field_count {
         let elided_whitespace =
             crate::collect_elided_whitespace(sig_end, source_code, variant_range.end);
         diffs.push((None, Code(elided_whitespace)));

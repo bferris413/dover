@@ -346,7 +346,12 @@ fn collect_variant_diffs(
     let mut i = sig_end;
     let enum_range = enum_.span().byte_range();
 
-    if enum_.variants.len() > vds.len() {
+    let changed_variant_count = vds
+        .diffs()
+        .iter()
+        .filter(|diff| get_original_variant(diff).is_some())
+        .count();
+    if enum_.variants.len() > changed_variant_count {
         let elided_whitespace =
             crate::collect_elided_whitespace(sig_end, source_code, enum_range.end);
         diffs.push((None, Code(elided_whitespace)));

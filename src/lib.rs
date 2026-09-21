@@ -22,7 +22,7 @@ mod html;
 mod overview;
 
 pub use git::{Change as GitChange, ChangedFile, Treeish, get_changed_files};
-pub use html::HTML_BOILERPLATE;
+pub use html::{HTML_BOILERPLATE, HTML_EPILOGUE};
 
 const ASCII_LINE_FEED: u8 = 10;
 const TERMINAL_HEADER_WIDTH: usize = 80;
@@ -82,12 +82,12 @@ impl ViewableDiffs {
 
         for diff in self.vds.iter_mut() {
             if let Some(ref mut old) = diff.old {
+                push_collapse_separator(&mut collapsed_old);
                 collapsed_old.append(old);
-                collapsed_old.push((None, Code("\n".to_string())));
             }
             if let Some(ref mut new) = diff.new {
+                push_collapse_separator(&mut collapsed_new);
                 collapsed_new.append(new);
-                collapsed_new.push((None, Code("\n".to_string())));
             }
         }
 
@@ -110,6 +110,15 @@ impl ViewableDiffs {
             .filter_map(ViewableDiff::to_terminal)
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+fn push_collapse_separator(collapsed: &mut Vec<(Option<ExistenceChange>, Code)>) {
+    if collapsed
+        .last()
+        .is_some_and(|(_, code)| !code.0.ends_with('\n'))
+    {
+        collapsed.push((None, Code("\n".to_string())));
     }
 }
 
@@ -435,9 +444,9 @@ impl Html for ViewableDiffs {
                 html.push_str("</td>");
             } else {
                 html.push_str("<td>");
-                html.push_str("<pre><code>");
+                html.push_str("<div class=\"diff-cell-scroll\"><pre><code>");
                 html.push_str(&deleted_content);
-                html.push_str("</code></pre>");
+                html.push_str("</code></pre></div>");
                 html.push_str("</td>");
             }
 
@@ -462,11 +471,13 @@ impl Html for ViewableDiffs {
                 html.push_str("</td>");
             } else {
                 html.push_str("<td>");
-                html.push_str("<pre><code>");
+                html.push_str("<div class=\"diff-cell-scroll\"><pre><code>");
                 html.push_str(&added_content);
-                html.push_str("</code></pre>");
+                html.push_str("</code></pre></div>");
                 html.push_str("</td>");
             }
+
+            html.push_str("</tr>");
         }
 
         // let html_with_br = html.replace("\n", "<br>");
@@ -744,48 +755,51 @@ impl OverviewDiff {
 }
 impl Html for OverviewDiff {
     fn to_html(&self) -> String {
-        let mut html = "<table>".to_string();
-        html.push_str(&format!(
-            "<tr><th colspan=\"2\" class=\"filename\">{}</th></tr>",
-            self.file1.display()
-        ));
+        let fp1 = self.file1.to_string_lossy();
+        let fp2 = self.file2.to_string_lossy();
+        let label = if fp1 == fp2 {
+            fp1.to_string()
+        } else {
+            format!("{fp1} → {fp2}")
+        };
+        let mut html = format!(
+            "<details class=\"file-diff\" data-file-path=\"{}\" open><summary>{}</summary>",
+            escape_html(&fp1),
+            escape_html(&label)
+        );
+
+        fn render_section(html: &mut String, title: &str, viewable: &ViewableDiffs) {
+            if viewable.is_empty() {
+                return;
+            }
+            html.push_str(&format!(
+                "<details class=\"diff-section\" open><summary>{}</summary>",
+                escape_html(title)
+            ));
+            html.push_str("<div class=\"diff-table-wrap\"><table class=\"diff-table\"><colgroup><col><col></colgroup><tbody>");
+            html.push_str(&viewable.to_html());
+            html.push_str("</tbody></table></div></details>");
+        }
 
         let viewable_uses = self.uses_diff.as_viewable();
-        if !viewable_uses.is_empty() {
-            html.push_str("<tr><th colspan=\"2\">Uses</th></tr>");
-            html.push_str(&viewable_uses.to_html());
-        }
+        render_section(&mut html, "Uses", &viewable_uses);
 
         let viewable_structs = self.structs_diff.as_viewable();
-        if !viewable_structs.is_empty() {
-            html.push_str("<tr><th colspan=\"2\">Structs</th></tr>");
-            html.push_str(&viewable_structs.to_html());
-        }
+        render_section(&mut html, "Structs", &viewable_structs);
 
         let viewable_enums = self.enums_diff.as_viewable();
-        if !viewable_enums.is_empty() {
-            html.push_str("<tr><th colspan=\"2\">Enums</th></tr>");
-            html.push_str(&viewable_enums.to_html());
-        }
+        render_section(&mut html, "Enums", &viewable_enums);
 
         let viewable_traits = self.traits_diff.as_viewable();
-        if !viewable_traits.is_empty() {
-            html.push_str("<tr><th colspan=\"2\">Traits</th></tr>");
-            html.push_str(&viewable_traits.to_html());
-        }
+        render_section(&mut html, "Traits", &viewable_traits);
 
         let viewable_functions = self.functions_diff.as_viewable();
-        if !viewable_functions.is_empty() {
-            html.push_str("<tr><th colspan=\"2\">Functions</th></tr>");
-            html.push_str(&viewable_functions.to_html());
-        }
+        render_section(&mut html, "Functions", &viewable_functions);
 
         let viewable_impls = self.impls_diff.as_viewable();
-        if !viewable_impls.is_empty() {
-            html.push_str("<tr><th colspan=\"2\">Impls</th></tr>");
-            html.push_str(&viewable_impls.to_html());
-        }
+        render_section(&mut html, "Impls", &viewable_impls);
 
+        html.push_str("</details>");
         html
     }
 }
@@ -1076,7 +1090,9 @@ mod rendering_tests {
 
         let html = overview_diff.to_html();
         assert!(
-            html.contains(&format!("<tr><th colspan=\"2\">{section}</th></tr>")),
+            html.contains(&format!(
+                "<details class=\"diff-section\" open><summary>{section}</summary>"
+            )),
             "{label} was not rendered in the {section} HTML section"
         );
 
@@ -1278,8 +1294,8 @@ mod rendering_tests {
                 "struct Old; impl Old { fn run(&self) {} }\n",
                 "struct New; impl New { fn run(&self) {} }\n",
                 "Impls",
-                "fn run(&self)",
-                "fn run(&self)",
+                "impl Old {",
+                "impl New {",
             ),
         ];
 
@@ -1429,6 +1445,33 @@ mod rendering_tests {
     }
 
     #[test]
+    fn deleted_impl_is_highlighted_from_its_declaration_in_both_renderers() {
+        let before = r#"struct RandomStruct;
+impl RandomStruct {
+    fn run(&self) {
+        println!("body must be elided");
+    }
+}"#;
+        let after = "struct RandomStruct;";
+        let overview_diff = diff(before, after);
+        let html = overview_diff.to_html();
+        let terminal = with_colors(true, || overview_diff.to_string());
+
+        assert!(
+            html.contains("<span class=\"deleted\">impl RandomStruct {"),
+            "{html}"
+        );
+        assert!(
+            terminal.contains("\u{1b}[31mimpl RandomStruct {\u{1b}[0m"),
+            "{terminal:?}"
+        );
+        assert!(html.contains("fn run(&amp;self)"), "{html}");
+        assert!(terminal.contains("fn run(&self)"), "{terminal:?}");
+        assert!(!html.contains("body must be elided"), "{html}");
+        assert!(!terminal.contains("body must be elided"), "{terminal:?}");
+    }
+
+    #[test]
     fn html_renderer_marks_changes_and_escapes_code() {
         let view = ViewableDiffs::new(vec![ViewableDiff {
             old: Some(vec![
@@ -1444,14 +1487,14 @@ mod rendering_tests {
         assert_eq!(
             view.to_html(),
             concat!(
-                "<tr><td><pre><code>",
+                "<tr><td><div class=\"diff-cell-scroll\"><pre><code>",
                 "<span class=\"\">Result&lt;</span>",
                 "<span class=\"deleted\">A &amp; B</span>",
-                "</code></pre></td>",
-                "<td><pre><code>",
+                "</code></pre></div></td>",
+                "<td><div class=\"diff-cell-scroll\"><pre><code>",
                 "<span class=\"\">Result&lt;</span>",
                 "<span class=\"added\">A &gt; B</span>",
-                "</code></pre></td>"
+                "</code></pre></div></td></tr>"
             )
         );
     }
@@ -1477,17 +1520,35 @@ mod rendering_tests {
             addition.to_html(),
             concat!(
                 "<tr><td class=\"empty-content\"></td>",
-                "<td><pre><code><span class=\"added\">struct Added;</span>",
-                "</code></pre></td>"
+                "<td><div class=\"diff-cell-scroll\"><pre><code>",
+                "<span class=\"added\">struct Added;</span>",
+                "</code></pre></div></td></tr>"
             )
         );
         assert_eq!(
             deletion.to_html(),
             concat!(
-                "<tr><td><pre><code><span class=\"deleted\">struct Removed;</span>",
-                "</code></pre></td><td class=\"empty-content\"></td>"
+                "<tr><td><div class=\"diff-cell-scroll\"><pre><code>",
+                "<span class=\"deleted\">struct Removed;</span>",
+                "</code></pre></div></td><td class=\"empty-content\"></td></tr>"
             )
         );
+    }
+
+    #[test]
+    fn html_renderer_does_not_double_space_collapsed_uses() {
+        let html = diff("use alpha::A;\nuse beta::B;\n", "").to_html();
+
+        assert!(!html.contains("<span class=\"\">\n</span>"), "{html}");
+    }
+
+    #[test]
+    fn html_renderer_elides_unchanged_impl_items_on_both_sides() {
+        let before = "impl Widget { fn kept(&self) {} fn removed(&self) {} }";
+        let after = "impl Widget { fn kept(&self) {} }";
+        let html = diff(before, after).to_html();
+
+        assert_eq!(html.matches("..</span>").count(), 2, "{html}");
     }
 
     #[test]
@@ -1516,15 +1577,21 @@ impl Record { fn method(&mut self, value: u8) {} }
         let mut previous = 0;
         for section in expected_sections {
             let position = html
-                .find(&format!("<tr><th colspan=\"2\">{section}</th></tr>"))
+                .find(&format!(
+                    "<details class=\"diff-section\" open><summary>{section}</summary>"
+                ))
                 .unwrap_or_else(|| panic!("missing {section} section in {html}"));
             assert!(position >= previous, "{section} was rendered out of order");
             previous = position;
         }
 
         assert!(
-            html.starts_with("<table><tr><th colspan=\"2\" class=\"filename\">before.rs</th></tr>")
+            html.starts_with(
+                "<details class=\"file-diff\" data-file-path=\"before.rs\" open><summary>before.rs → after.rs</summary>"
+            )
         );
+        assert_eq!(html.matches("<colgroup><col><col></colgroup>").count(), 6);
+        assert!(html.ends_with("</details>"));
         assert!(html.contains("<span class=\"deleted\">"));
         assert!(html.contains("<span class=\"added\">"));
     }

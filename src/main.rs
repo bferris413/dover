@@ -5,7 +5,7 @@ use std::process::{Command as ProcessCommand, Stdio};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, crate_version};
-use dover::{Diff, GitChange, HTML_BOILERPLATE, Html, Overview, Treeish};
+use dover::{Diff, GitChange, HTML_BOILERPLATE, HTML_EPILOGUE, Html, Overview, Treeish};
 
 #[derive(Debug, Parser)]
 #[command(author, version = crate_version!(), about = "Diff OVERview - summarize git diffs of Rust code")]
@@ -132,7 +132,7 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
     }
 
     if let OutputFormat::Html = output {
-        rendered.push_str("</body></html>");
+        rendered.push_str(HTML_EPILOGUE);
     }
     write_output(&rendered, matches!(output, OutputFormat::Plain))?;
 
@@ -154,7 +154,7 @@ fn run_files(c: Command, output: OutputFormat) -> Result<()> {
         OutputFormat::Html => {
             let mut html = HTML_BOILERPLATE.to_string();
             html.push_str(&file_diff.to_html());
-            html.push_str("</body></html>");
+            html.push_str(HTML_EPILOGUE);
             html
         }
     };
