@@ -31,10 +31,10 @@ impl OutputFormat {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Diff two commits (emulates `git diff [SHA-1 [SHA-1]]`)
+    /// Diff revisions or the working tree (emulates `git diff [REVISION [REVISION]]`)
     Diff {
-        commit1: Option<String>,
-        commit2: Option<String>,
+        revision1: Option<String>,
+        revision2: Option<String>,
     },
     /// Diff two files
     Files { file1: PathBuf, file2: PathBuf },
@@ -48,18 +48,31 @@ fn main() -> Result<()> {
     let output = OutputFormat::new(args.to_html);
 
     match args.command {
-        Command::Diff { commit1, commit2 } => run_diff(Command::Diff { commit1, commit2 }, output),
+        Command::Diff {
+            revision1,
+            revision2,
+        } => run_diff(
+            Command::Diff {
+                revision1,
+                revision2,
+            },
+            output,
+        ),
         Command::Files { file1, file2 } => run_files(Command::Files { file1, file2 }, output),
         // Command::Overview { files } => run_overview(Command::Overview { files }, &output),
     }
 }
 
 fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
-    let Command::Diff { commit1, commit2 } = command else {
+    let Command::Diff {
+        revision1,
+        revision2,
+    } = command
+    else {
         unreachable!();
     };
 
-    let trees = commit1.map(|c1| Treeish::new(c1, commit2));
+    let trees = revision1.map(|revision1| Treeish::new(revision1, revision2));
 
     let repo_changes = dover::get_changed_files(PathBuf::from("."), trees)?;
 

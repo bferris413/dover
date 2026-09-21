@@ -25,10 +25,15 @@ cd dover && cargo build --release
 # Usage
 The main entry point is the `diff` subcommand, meant to emulate the behavior of `git diff`:
 ```sh
-# like git diff [c1 [c2]]
-dover diff [c1 [c2]]
+dover diff                       # index vs. working tree
+dover diff main                  # main vs. index and working tree
+dover diff main feature/demo     # two branches
+dover diff HEAD~2 HEAD           # any tree-ish revisions
 ```
-If present, `c1` and `c2` must be valid commit SHAs. Support is planned for branch names, refnames like `HEAD`, and selections like `HEAD~2`.
+The arguments can be any Git revisions that resolve to trees, including branch names,
+tags, commit SHAs, `HEAD`, and relative expressions such as `HEAD~2`. With one revision,
+dover compares it to the current index and working tree. With two revisions, it compares
+the two committed trees.
 
 See `dover --help` for all supported commands.
 

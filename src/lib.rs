@@ -571,7 +571,7 @@ fn get_overview(path: PathBuf, source: String) -> Result<Overview> {
         let tree = &r#use.tree;
 
         let paths = uses::get_paths_from_usetree(tree);
-        use_paths.extend(paths.into_iter());
+        use_paths.extend(paths);
     }
 
     let overview = Overview {
@@ -1041,4 +1041,147 @@ fn escape_html(input: &str) -> String {
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
         .replace("'", "&#39;")
+}
+
+#[cfg(test)]
+mod rendering_tests {
+    use super::*;
+
+    fn overview(path: &str, source: &str) -> Overview {
+        Overview::try_from((PathBuf::from(path), source.to_owned())).unwrap()
+    }
+
+    fn diff(before: &str, after: &str) -> OverviewDiff {
+        overview("before.rs", before).diff_with(&overview("after.rs", after))
+    }
+
+    #[test]
+    fn terminal_renderer_keeps_changes_in_side_by_side_columns() {
+        colored::control::set_override(false);
+
+        let view = ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(vec![(
+                Some(ExistenceChange::Deleted),
+                Code("fn old()".to_owned()),
+            )]),
+            new: Some(vec![(
+                Some(ExistenceChange::Added),
+                Code("fn new()".to_owned()),
+            )]),
+        }]);
+
+        let expected = format!("- fn old(){}      + fn new()", " ".repeat(40));
+        assert_eq!(view.to_string(), expected);
+    }
+
+    #[test]
+    fn html_renderer_marks_changes_and_escapes_code() {
+        let view = ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(vec![
+                (None, Code("Result<".to_owned())),
+                (Some(ExistenceChange::Deleted), Code("A & B".to_owned())),
+            ]),
+            new: Some(vec![
+                (None, Code("Result<".to_owned())),
+                (Some(ExistenceChange::Added), Code("A > B".to_owned())),
+            ]),
+        }]);
+
+        assert_eq!(
+            view.to_html(),
+            concat!(
+                "<tr><td><pre><code>",
+                "<span class=\"\">Result&lt;</span>",
+                "<span class=\"deleted\">A &amp; B</span>",
+                "</code></pre></td>",
+                "<td><pre><code>",
+                "<span class=\"\">Result&lt;</span>",
+                "<span class=\"added\">A &gt; B</span>",
+                "</code></pre></td>"
+            )
+        );
+    }
+
+    #[test]
+    fn html_renderer_uses_empty_cells_for_one_sided_diffs() {
+        let addition = ViewableDiffs::new(vec![ViewableDiff {
+            old: None,
+            new: Some(vec![(
+                Some(ExistenceChange::Added),
+                Code("struct Added;".to_owned()),
+            )]),
+        }]);
+        let deletion = ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(vec![(
+                Some(ExistenceChange::Deleted),
+                Code("struct Removed;".to_owned()),
+            )]),
+            new: None,
+        }]);
+
+        assert_eq!(
+            addition.to_html(),
+            concat!(
+                "<tr><td class=\"empty-content\"></td>",
+                "<td><pre><code><span class=\"added\">struct Added;</span>",
+                "</code></pre></td>"
+            )
+        );
+        assert_eq!(
+            deletion.to_html(),
+            concat!(
+                "<tr><td><pre><code><span class=\"deleted\">struct Removed;</span>",
+                "</code></pre></td><td class=\"empty-content\"></td>"
+            )
+        );
+    }
+
+    #[test]
+    fn overview_html_renders_each_changed_rust_item_in_stable_order() {
+        let before = r#"
+use old::Thing;
+
+struct Record { old: u8 }
+enum Choice { Old }
+trait Work { fn run(&self); }
+fn top(value: u8) -> u8 { value }
+impl Record { fn method(&self) {} }
+"#;
+        let after = r#"
+use new::Thing;
+
+struct Record { new: String }
+enum Choice { New(String) }
+trait Work { fn run(&mut self, value: u8); }
+fn top(value: String) -> String { value }
+impl Record { fn method(&mut self, value: u8) {} }
+"#;
+
+        let html = diff(before, after).to_html();
+        let expected_sections = ["Uses", "Structs", "Enums", "Traits", "Functions", "Impls"];
+        let mut previous = 0;
+        for section in expected_sections {
+            let position = html
+                .find(&format!("<tr><th colspan=\"2\">{section}</th></tr>"))
+                .unwrap_or_else(|| panic!("missing {section} section in {html}"));
+            assert!(position >= previous, "{section} was rendered out of order");
+            previous = position;
+        }
+
+        assert!(
+            html.starts_with("<table><tr><th colspan=\"2\" class=\"filename\">before.rs</th></tr>")
+        );
+        assert!(html.contains("<span class=\"deleted\">"));
+        assert!(html.contains("<span class=\"added\">"));
+    }
+
+    #[test]
+    fn unchanged_overview_has_no_terminal_output() {
+        colored::control::set_override(false);
+        let source = "struct Same { value: u8 }\n";
+        let unchanged = diff(source, source);
+
+        assert!(unchanged.all_empty());
+        assert_eq!(unchanged.to_string(), "");
+    }
 }

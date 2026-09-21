@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use git2::{Delta, FileMode, Oid, Repository};
+use git2::{Delta, FileMode, Oid, Repository, Tree};
 use std::{fmt::Display, fs, path::PathBuf};
 
 /// Represents the type of change for a file.
@@ -41,12 +41,15 @@ impl Display for ChangedFile {
 
 #[derive(Clone, Debug)]
 pub struct Treeish {
-    commit1: String,
-    commit2: Option<String>,
+    revision1: String,
+    revision2: Option<String>,
 }
 impl Treeish {
-    pub fn new(commit1: String, commit2: Option<String>) -> Self {
-        Treeish { commit1, commit2 }
+    pub fn new(revision1: String, revision2: Option<String>) -> Self {
+        Treeish {
+            revision1,
+            revision2,
+        }
     }
 }
 
@@ -66,44 +69,40 @@ pub fn get_changed_files(
         bail!("Couldn't get workdir from {}", repo_path.display());
     };
 
-    let mut index_to_workdir = false;
+    let mut new_side_is_workdir = false;
     let diff = match trees_to_diff {
         // emulates `git diff`
         None => {
-            index_to_workdir = true;
+            new_side_is_workdir = true;
             repo.diff_index_to_workdir(None, None)
                 .context("Couldn't get diff from index to workdir")?
         }
-        Some(Treeish { commit1, commit2 }) => {
-            let (c1_tree, c2_tree) = {
-                // we need to find the tree associated with each commit
-                let c1_oid = Oid::from_str(&commit1).context("Couldn't parse commit1 OID")?;
-                let c2_oid =
-                    commit2.map(|oid| Oid::from_str(&oid).context("Couldn't parse commit2 OID"));
+        Some(Treeish {
+            revision1,
+            revision2,
+        }) => {
+            let revision1_tree = resolve_tree(&repo, &revision1)?;
+            let revision2_tree = revision2
+                .as_deref()
+                .map(|revision| resolve_tree(&repo, revision))
+                .transpose()?;
 
-                let c2_oid = match c2_oid {
-                    Some(Err(e)) => bail!("Couldn't parse commit2 OID: {}", e),
-                    Some(Ok(oid)) => Some(oid),
-                    None => None,
-                };
-
-                // let c1_tree = dbg!(repo.find_tree(c1_oid))?;
-                let c1_tree = repo.find_commit(c1_oid).and_then(|c1| c1.tree())?;
-                let c2_tree = c2_oid.map(|oid| repo.find_commit(oid).and_then(|c| c.tree()));
-                // let c2_tree = c2_oid.map(|oid| repo.find_tree(oid));
-
-                if let Some(Err(e)) = c2_tree {
-                    bail!("Couldn't find tree for commit2: {}", e);
-                }
-                let c2_tree = c2_tree.map(|tree| tree.unwrap());
-
-                (c1_tree, c2_tree)
-            };
-            match c2_tree {
+            match revision2_tree {
                 Some(_) => repo
-                    .diff_tree_to_tree(Some(&c1_tree), c2_tree.as_ref(), None)
-                    .context("Couldn't get diff from {commit1}")?,
-                None => repo.diff_tree_to_workdir_with_index(Some(&c1_tree), None)?,
+                    .diff_tree_to_tree(Some(&revision1_tree), revision2_tree.as_ref(), None)
+                    .with_context(|| {
+                        format!(
+                            "Couldn't diff revisions `{revision1}` and `{}`",
+                            revision2.as_deref().unwrap()
+                        )
+                    })?,
+                None => {
+                    new_side_is_workdir = true;
+                    repo.diff_tree_to_workdir_with_index(Some(&revision1_tree), None)
+                        .with_context(|| {
+                            format!("Couldn't diff revision `{revision1}` against the worktree")
+                        })?
+                }
             }
         }
     };
@@ -148,7 +147,7 @@ pub fn get_changed_files(
                     };
                     let new_oid = delta.new_file().id();
 
-                    let contents = if index_to_workdir {
+                    let contents = if new_side_is_workdir {
                         // new file is in the workdir,
                         // according to Repository::diff_index_to_workdir docs
                         let new_full_path = repo_path.join(path);
@@ -191,7 +190,7 @@ pub fn get_changed_files(
                     }
 
                     let before_contents = get_blob_contents(&repo, &old_oid).unwrap();
-                    let after_contents = if index_to_workdir {
+                    let after_contents = if new_side_is_workdir {
                         // old file is in the index, new file is in the workdir,
                         // according to Repository::diff_index_to_workdir docs
                         //
@@ -267,6 +266,14 @@ pub fn get_changed_files(
     Ok(repo_files)
 }
 
+/// Resolve any Git revision expression that names a tree-ish object.
+fn resolve_tree<'repo>(repo: &'repo Repository, revision: &str) -> Result<Tree<'repo>> {
+    repo.revparse_single(revision)
+        .with_context(|| format!("Couldn't resolve Git revision `{revision}`"))?
+        .peel_to_tree()
+        .with_context(|| format!("Git revision `{revision}` does not resolve to a tree"))
+}
+
 /// Get the contents of a blob by its OID.
 fn get_blob_contents(repo: &Repository, oid: &Oid) -> Result<String> {
     let blob = repo.find_blob(*oid).context("Failed to find blob")?;
@@ -329,6 +336,98 @@ mod tests {
             &parent_refs,
         )
         .unwrap()
+    }
+
+    fn create_branch(repo: &Repository, name: &str, target: Oid) {
+        let commit = repo.find_commit(target).unwrap();
+        repo.branch(name, &commit, false).unwrap();
+    }
+
+    fn assert_modified_file(changes: &RepoChangedFiles, path: &str, before: &str, after: &str) {
+        assert_eq!(changes.changed_files.len(), 1);
+        let changed_file = &changes.changed_files[0];
+        assert!(changed_file.path.ends_with(path));
+        assert!(matches!(
+            &changed_file.change_type,
+            Change::Modified {
+                before_contents,
+                after_contents,
+            } if before_contents == before && after_contents == after
+        ));
+    }
+
+    #[test]
+    fn diffs_two_branch_names() {
+        let temp_repo = TempRepo::new();
+        let repo = Repository::init(&temp_repo.path).unwrap();
+        let file_path = temp_repo.path.join("example.rs");
+
+        let before = "pub struct Example;\n";
+        fs::write(&file_path, before).unwrap();
+        let before_commit = commit_all(&repo, "before");
+        create_branch(&repo, "demo/before", before_commit);
+
+        let after = "pub struct Example { pub value: u8 }\n";
+        fs::write(&file_path, after).unwrap();
+        let after_commit = commit_all(&repo, "after");
+        create_branch(&repo, "demo/after", after_commit);
+
+        let changes = get_changed_files(
+            temp_repo.path.clone(),
+            Some(Treeish::new(
+                "demo/before".to_owned(),
+                Some("demo/after".to_owned()),
+            )),
+        )
+        .unwrap();
+
+        assert_modified_file(&changes, "example.rs", before, after);
+    }
+
+    #[test]
+    fn diffs_branch_name_against_worktree() {
+        let temp_repo = TempRepo::new();
+        let repo = Repository::init(&temp_repo.path).unwrap();
+        let file_path = temp_repo.path.join("example.rs");
+
+        let before = "pub fn value() -> u8 { 1 }\n";
+        fs::write(&file_path, before).unwrap();
+        let base_commit = commit_all(&repo, "base");
+        create_branch(&repo, "demo-base", base_commit);
+
+        let after = "pub fn value() -> u8 { 2 }\n";
+        fs::write(&file_path, after).unwrap();
+
+        let changes = get_changed_files(
+            temp_repo.path.clone(),
+            Some(Treeish::new("demo-base".to_owned(), None)),
+        )
+        .unwrap();
+
+        assert_modified_file(&changes, "example.rs", before, after);
+    }
+
+    #[test]
+    fn diffs_relative_revision_expressions() {
+        let temp_repo = TempRepo::new();
+        let repo = Repository::init(&temp_repo.path).unwrap();
+        let file_path = temp_repo.path.join("example.rs");
+
+        let before = "pub const VALUE: u8 = 1;\n";
+        fs::write(&file_path, before).unwrap();
+        commit_all(&repo, "before");
+
+        let after = "pub const VALUE: u8 = 2;\n";
+        fs::write(&file_path, after).unwrap();
+        commit_all(&repo, "after");
+
+        let changes = get_changed_files(
+            temp_repo.path.clone(),
+            Some(Treeish::new("HEAD~1".to_owned(), Some("HEAD".to_owned()))),
+        )
+        .unwrap();
+
+        assert_modified_file(&changes, "example.rs", before, after);
     }
 
     #[test]
