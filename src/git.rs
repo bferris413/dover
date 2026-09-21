@@ -286,7 +286,9 @@ fn get_blob_contents(repo: &Repository, oid: &Oid) -> Result<String> {
 mod tests {
     use super::*;
     use git2::Signature;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_TEMP_REPO: AtomicU64 = AtomicU64::new(0);
 
     struct TempRepo {
         path: PathBuf,
@@ -294,11 +296,9 @@ mod tests {
 
     impl TempRepo {
         fn new() -> Self {
-            let unique = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            let path = std::env::temp_dir().join(format!("dover-git-test-{unique}"));
+            let unique = NEXT_TEMP_REPO.fetch_add(1, Ordering::Relaxed);
+            let process = std::process::id();
+            let path = std::env::temp_dir().join(format!("dover-git-test-{process}-{unique}"));
             fs::create_dir(&path).unwrap();
             Self { path }
         }

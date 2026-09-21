@@ -367,7 +367,7 @@ impl View for ImplDiff {
                 &self.old_src_map,
                 ExistenceChange::Deleted,
                 match self.change {
-                    Change::Existence(ex) => dbg!(Some(ex)),
+                    Change::Existence(ex) => Some(ex),
                     Change::Modified => None,
                 },
                 &self.items_diff,
@@ -382,7 +382,7 @@ impl View for ImplDiff {
                 &self.new_src_map,
                 ExistenceChange::Added,
                 match self.change {
-                    Change::Existence(ex) => dbg!(Some(ex)),
+                    Change::Existence(ex) => Some(ex),
                     Change::Modified => None,
                 },
                 &self.items_diff,

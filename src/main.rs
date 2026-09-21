@@ -1,4 +1,7 @@
+use std::env;
+use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
+use std::process::{Command as ProcessCommand, Stdio};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, crate_version};
@@ -81,7 +84,10 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
         .into_iter()
         .filter(|c| c.path.extension().is_some_and(|ext| ext == "rs"));
 
-    let mut html = HTML_BOILERPLATE.to_string();
+    let mut rendered = match output {
+        OutputFormat::Html => HTML_BOILERPLATE.to_string(),
+        OutputFormat::Plain => String::new(),
+    };
 
     for changed_file in changes {
         let path = changed_file.path;
@@ -97,10 +103,7 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
 
                 let overview_diff = overview1.diff_with(&overview2);
                 if !overview_diff.all_empty() {
-                    match output {
-                        OutputFormat::Plain => println!("{overview_diff}"),
-                        OutputFormat::Html => html.push_str(&overview_diff.to_html()),
-                    }
+                    append_diff(&mut rendered, &overview_diff, output);
                 }
             }
             GitChange::Added { contents } => {
@@ -111,10 +114,7 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
 
                 let overview_diff = overview1.diff_with(&overview2);
                 if !overview_diff.all_empty() {
-                    match output {
-                        OutputFormat::Plain => println!("{overview_diff}"),
-                        OutputFormat::Html => html.push_str(&overview_diff.to_html()),
-                    }
+                    append_diff(&mut rendered, &overview_diff, output);
                 }
             }
             GitChange::Deleted { contents } => {
@@ -125,19 +125,16 @@ fn run_diff(command: Command, output: OutputFormat) -> Result<()> {
 
                 let overview_diff = overview1.diff_with(&overview2);
                 if !overview_diff.all_empty() {
-                    match output {
-                        OutputFormat::Plain => println!("{overview_diff}"),
-                        OutputFormat::Html => html.push_str(&overview_diff.to_html()),
-                    }
+                    append_diff(&mut rendered, &overview_diff, output);
                 }
             }
         }
     }
 
     if let OutputFormat::Html = output {
-        html.push_str("</body></html>");
-        println!("{}", html);
+        rendered.push_str("</body></html>");
     }
+    write_output(&rendered, matches!(output, OutputFormat::Plain))?;
 
     Ok(())
 }
@@ -152,17 +149,85 @@ fn run_files(c: Command, output: OutputFormat) -> Result<()> {
 
     let file_diff = overview1.diff_with(&overview2);
 
-    match output {
-        OutputFormat::Plain => println!("{}", file_diff),
+    let rendered = match output {
+        OutputFormat::Plain => file_diff.to_string(),
         OutputFormat::Html => {
             let mut html = HTML_BOILERPLATE.to_string();
             html.push_str(&file_diff.to_html());
             html.push_str("</body></html>");
-            println!("{}", html);
+            html
         }
-    }
+    };
+    write_output(&rendered, matches!(output, OutputFormat::Plain))?;
 
     Ok(())
+}
+
+fn append_diff(rendered: &mut String, diff: &dover::OverviewDiff, output: OutputFormat) {
+    if !rendered.is_empty() && matches!(output, OutputFormat::Plain) {
+        rendered.push_str("\n\n");
+    }
+    match output {
+        OutputFormat::Plain => rendered.push_str(&diff.to_string()),
+        OutputFormat::Html => rendered.push_str(&diff.to_html()),
+    }
+}
+
+fn write_output(output: &str, page_plain_output: bool) -> Result<()> {
+    if output.is_empty() {
+        return Ok(());
+    }
+
+    if page_plain_output && io::stdout().is_terminal() && write_to_pager(output)? {
+        return Ok(());
+    }
+
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    writeln!(stdout, "{output}").context("Error writing output")
+}
+
+fn write_to_pager(output: &str) -> Result<bool> {
+    let pager = env::var("PAGER").ok();
+    let pager = pager.as_deref().map(str::trim).unwrap_or("less");
+    if pager.is_empty() {
+        return Ok(false);
+    }
+
+    let mut words = pager.split_whitespace();
+    let Some(program) = words.next() else {
+        return Ok(false);
+    };
+    let mut command = ProcessCommand::new(program);
+    command.args(words);
+    if PathBuf::from(program)
+        .file_name()
+        .is_some_and(|name| name == "less")
+    {
+        command.args(["-F", "-R", "-X"]);
+    }
+
+    let mut child = match command.stdin(Stdio::piped()).spawn() {
+        Ok(child) => child,
+        Err(_) => return Ok(false),
+    };
+
+    let mut pager_write_error = None;
+    if let Some(mut stdin) = child.stdin.take() {
+        let write_result = stdin
+            .write_all(output.as_bytes())
+            .and_then(|()| stdin.write_all(b"\n"));
+        if let Err(error) = write_result
+            && error.kind() != io::ErrorKind::BrokenPipe
+        {
+            pager_write_error = Some(error);
+        }
+    }
+    child.wait().context("Error waiting for pager")?;
+    if let Some(error) = pager_write_error {
+        return Err(error).context("Error writing to pager");
+    }
+    Ok(true)
 }
 
 #[allow(unused)]

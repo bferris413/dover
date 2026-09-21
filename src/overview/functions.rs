@@ -196,7 +196,15 @@ impl Function {
 
 impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let source = remove_block(self.original_fn.span().source_text().expect(NO_SRC_ERROR));
+        let source = if matches!(self.vis, Visibility::Inherited) {
+            self.original_fn
+                .sig
+                .span()
+                .source_text()
+                .expect(NO_SRC_ERROR)
+        } else {
+            remove_block(self.original_fn.span().source_text().expect(NO_SRC_ERROR))
+        };
         write!(f, "{source}")
     }
 }

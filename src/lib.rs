@@ -24,8 +24,8 @@ mod overview;
 pub use git::{Change as GitChange, ChangedFile, Treeish, get_changed_files};
 pub use html::HTML_BOILERPLATE;
 
-const DEFAULT_MAX_COL_W: usize = 50;
 const ASCII_LINE_FEED: u8 = 10;
+const TERMINAL_HEADER_WIDTH: usize = 80;
 
 pub trait ByteRange {
     fn old_ranges(&self) -> Vec<Range<usize>>;
@@ -103,6 +103,310 @@ impl ViewableDiffs {
 
         self.vds = vec![ViewableDiff { old, new }];
     }
+
+    fn to_terminal(&self) -> String {
+        self.vds
+            .iter()
+            .filter_map(ViewableDiff::to_terminal)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+impl ViewableDiff {
+    fn to_terminal(&self) -> Option<String> {
+        let old_lines = self
+            .old
+            .as_ref()
+            .map(|old| terminal_lines(old, ExistenceChange::Deleted))
+            .unwrap_or_default();
+        let new_lines = self
+            .new
+            .as_ref()
+            .map(|new| terminal_lines(new, ExistenceChange::Added))
+            .unwrap_or_default();
+        let lines = merge_terminal_sides(old_lines, new_lines);
+
+        (!lines.is_empty()).then(|| lines.join("\n"))
+    }
+}
+
+#[derive(Debug)]
+struct TerminalLine {
+    spans: Vec<(bool, String)>,
+    change: Option<ExistenceChange>,
+}
+
+impl TerminalLine {
+    fn plain(&self) -> String {
+        self.spans.iter().map(|(_, text)| text.as_str()).collect()
+    }
+
+    fn render(&self) -> String {
+        self.render_with_change(self.change)
+    }
+
+    fn render_with_change(&self, change: Option<ExistenceChange>) -> String {
+        let mut rendered = String::new();
+        for (changed, text) in &self.spans {
+            push_terminal_fragment(
+                &mut rendered,
+                text,
+                *changed || (self.change.is_none() && change.is_some()),
+                change.unwrap_or(ExistenceChange::Added),
+            );
+        }
+
+        let marker = match change {
+            Some(ExistenceChange::Deleted) => "-".red().to_string(),
+            Some(ExistenceChange::Added) => "+".green().to_string(),
+            None => " ".to_owned(),
+        };
+        format!("{marker} {rendered}")
+    }
+
+    fn unchanged(text: String) -> Self {
+        Self {
+            spans: vec![(false, text)],
+            change: None,
+        }
+    }
+
+    fn slice(&self, start: usize, end: usize, prefix: &str) -> Self {
+        let mut spans = Vec::new();
+        if !prefix.is_empty() {
+            spans.push((false, prefix.to_owned()));
+        }
+
+        let mut offset = 0;
+        for (changed, text) in &self.spans {
+            let span_start = offset;
+            let span_end = offset + text.len();
+            let overlap_start = start.max(span_start);
+            let overlap_end = end.min(span_end);
+            if overlap_start < overlap_end {
+                spans.push((
+                    *changed,
+                    text[overlap_start - span_start..overlap_end - span_start].to_owned(),
+                ));
+            }
+            offset = span_end;
+        }
+
+        Self {
+            spans,
+            change: self.change,
+        }
+    }
+}
+
+fn terminal_lines(
+    spans: &[(Option<ExistenceChange>, Code)],
+    expected_change: ExistenceChange,
+) -> Vec<TerminalLine> {
+    let mut rendered_lines = Vec::new();
+    let mut current_line = Vec::new();
+    let mut line_has_change = false;
+
+    let finish_line =
+        |line: &mut Vec<(bool, String)>, has_change: &mut bool, output: &mut Vec<TerminalLine>| {
+            if !line.is_empty() {
+                output.push(TerminalLine {
+                    spans: std::mem::take(line),
+                    change: has_change.then_some(expected_change),
+                });
+            }
+            *has_change = false;
+        };
+
+    for (change, code) in spans {
+        let changed = *change == Some(expected_change);
+        let mut remaining = code.0.as_str();
+
+        while let Some(newline) = remaining.find('\n') {
+            let fragment = &remaining[..newline];
+            if !fragment.is_empty() {
+                current_line.push((changed, fragment.to_owned()));
+            }
+            line_has_change |= changed && !fragment.is_empty();
+            finish_line(&mut current_line, &mut line_has_change, &mut rendered_lines);
+            remaining = &remaining[newline + 1..];
+        }
+
+        if !remaining.is_empty() {
+            current_line.push((changed, remaining.to_owned()));
+            line_has_change |= changed;
+        }
+    }
+
+    if !current_line.is_empty() {
+        finish_line(&mut current_line, &mut line_has_change, &mut rendered_lines);
+    }
+
+    rendered_lines
+}
+
+fn merge_terminal_sides(old: Vec<TerminalLine>, new: Vec<TerminalLine>) -> Vec<String> {
+    if old.is_empty() || new.is_empty() {
+        return old
+            .into_iter()
+            .chain(new)
+            .map(|line| line.render())
+            .collect();
+    }
+
+    let matches = unchanged_line_matches(&old, &new);
+    let mut result = Vec::new();
+    let (mut old_start, mut new_start) = (0, 0);
+    for (old_match, new_match) in matches {
+        render_changed_block(
+            &mut result,
+            &old[old_start..old_match],
+            &new[new_start..new_match],
+        );
+        result.push(old[old_match].render());
+        old_start = old_match + 1;
+        new_start = new_match + 1;
+    }
+    render_changed_block(&mut result, &old[old_start..], &new[new_start..]);
+    result
+}
+
+fn unchanged_line_matches(old: &[TerminalLine], new: &[TerminalLine]) -> Vec<(usize, usize)> {
+    let mut lengths = vec![vec![0; new.len() + 1]; old.len() + 1];
+    for old_index in (0..old.len()).rev() {
+        for new_index in (0..new.len()).rev() {
+            let is_match = old[old_index].change.is_none()
+                && new[new_index].change.is_none()
+                && old[old_index].plain() == new[new_index].plain();
+            lengths[old_index][new_index] = if is_match {
+                lengths[old_index + 1][new_index + 1] + 1
+            } else {
+                lengths[old_index + 1][new_index].max(lengths[old_index][new_index + 1])
+            };
+        }
+    }
+
+    let mut matches = Vec::new();
+    let (mut old_index, mut new_index) = (0, 0);
+    while old_index < old.len() && new_index < new.len() {
+        let is_match = old[old_index].change.is_none()
+            && new[new_index].change.is_none()
+            && old[old_index].plain() == new[new_index].plain();
+        if is_match {
+            matches.push((old_index, new_index));
+            old_index += 1;
+            new_index += 1;
+        } else if lengths[old_index + 1][new_index] >= lengths[old_index][new_index + 1] {
+            old_index += 1;
+        } else {
+            new_index += 1;
+        }
+    }
+    matches
+}
+
+fn render_changed_block(result: &mut Vec<String>, old: &[TerminalLine], new: &[TerminalLine]) {
+    if let ([old_line], [new_line]) = (old, new)
+        && let Some(factored) = factor_changed_line(old_line, new_line)
+    {
+        result.extend(factored.into_iter().map(|line| line.render()));
+    } else {
+        result.extend(
+            old.iter()
+                .map(|line| line.render_with_change(Some(ExistenceChange::Deleted))),
+        );
+        result.extend(
+            new.iter()
+                .map(|line| line.render_with_change(Some(ExistenceChange::Added))),
+        );
+    }
+}
+
+fn factor_changed_line(old: &TerminalLine, new: &TerminalLine) -> Option<Vec<TerminalLine>> {
+    if old.change != Some(ExistenceChange::Deleted) || new.change != Some(ExistenceChange::Added) {
+        return None;
+    }
+
+    let old_plain = old.plain();
+    let new_plain = new.plain();
+    let old_leading = leading_unchanged(old);
+    let new_leading = leading_unchanged(new);
+    let prefix_len = common_prefix_len(&old_leading, &new_leading);
+    let old_trailing = trailing_unchanged(old);
+    let new_trailing = trailing_unchanged(new);
+    let suffix_len = common_suffix_len(&old_trailing, &new_trailing)
+        .min(old_plain.len() - prefix_len)
+        .min(new_plain.len() - prefix_len);
+
+    let prefix = &old_plain[..prefix_len];
+    let suffix = &old_plain[old_plain.len() - suffix_len..];
+    if !prefix.trim_end().ends_with('(') || !suffix.trim_start().starts_with(')') {
+        return None;
+    }
+
+    let indentation: String = prefix.chars().take_while(|c| c.is_whitespace()).collect();
+    let nested_indent = format!("{indentation}    ");
+    Some(vec![
+        TerminalLine::unchanged(prefix.to_owned()),
+        old.slice(prefix_len, old_plain.len() - suffix_len, &nested_indent),
+        new.slice(prefix_len, new_plain.len() - suffix_len, &nested_indent),
+        TerminalLine::unchanged(format!("{indentation}{}", suffix.trim_start())),
+    ])
+}
+
+fn leading_unchanged(line: &TerminalLine) -> String {
+    line.spans
+        .iter()
+        .take_while(|(changed, _)| !changed)
+        .map(|(_, text)| text.as_str())
+        .collect()
+}
+
+fn trailing_unchanged(line: &TerminalLine) -> String {
+    let trailing: Vec<&str> = line
+        .spans
+        .iter()
+        .rev()
+        .take_while(|(changed, _)| !changed)
+        .map(|(_, text)| text.as_str())
+        .collect();
+    trailing.into_iter().rev().collect()
+}
+
+fn common_prefix_len(left: &str, right: &str) -> usize {
+    left.char_indices()
+        .zip(right.chars())
+        .take_while(|((_, left), right)| left == right)
+        .map(|((index, ch), _)| index + ch.len_utf8())
+        .last()
+        .unwrap_or(0)
+}
+
+fn common_suffix_len(left: &str, right: &str) -> usize {
+    left.char_indices()
+        .rev()
+        .zip(right.chars().rev())
+        .take_while(|((_, left), right)| left == right)
+        .map(|((index, _), _)| left.len() - index)
+        .last()
+        .unwrap_or(0)
+}
+
+fn push_terminal_fragment(
+    line: &mut String,
+    fragment: &str,
+    changed: bool,
+    expected_change: ExistenceChange,
+) {
+    if changed {
+        match expected_change {
+            ExistenceChange::Deleted => write!(line, "{}", fragment.red()).unwrap(),
+            ExistenceChange::Added => write!(line, "{}", fragment.green()).unwrap(),
+        }
+    } else {
+        line.push_str(fragment);
+    }
 }
 impl Html for ViewableDiffs {
     fn to_html(&self) -> String {
@@ -174,281 +478,9 @@ impl Html for ViewableDiffs {
 
 impl Display for ViewableDiffs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // dbg!(self);
-
-        // ---------------------------------------------------------------------------------
-        //  None of this is optimized for readability or efficiency. It's barely working.  |
-        //                                                                                 |
-        //   Edit: A recent bug reminded me how terrible this section is to work in. It    |
-        //         needs a complete rewrite.                                               |
-        // ---------------------------------------------------------------------------------
-        let (mut old_col, mut new_col) = (Vec::new(), Vec::new());
-
-        let old_col_max_width = {
-            let mut cur_max = DEFAULT_MAX_COL_W;
-            for vd in self.vds.iter() {
-                if let Some(ref old) = vd.old {
-                    let all_strings: Vec<_> = old.iter().map(|(_, c)| c.0.clone()).collect();
-                    let string = all_strings.join("");
-                    let local_max = string.lines().map(|l| l.len() + 2).max().unwrap_or(2);
-                    cur_max = cur_max.max(local_max);
-                }
-            }
-            cur_max
-        };
-
-        for vd in self.vds.iter() {
-            let (mut old_section, mut new_section) = (Vec::new(), Vec::new());
-            if let Some(old) = &vd.old {
-                let mut output_lines = Vec::new();
-                let mut line_of_spans = (false, String::new());
-                let mut line_of_spans_unformatted_len = 2;
-
-                for (change, code) in old {
-                    if code.0.contains("\n") {
-                        let mut code_lines = code.0.lines().peekable();
-                        let next_span = code_lines.next().unwrap();
-                        match change {
-                            Some(ExistenceChange::Deleted) => {
-                                // println!("writing old del(1) {}", next.red());
-                                line_of_spans_unformatted_len += next_span.len();
-                                write!(line_of_spans.1, "{}", next_span.red())?;
-                                line_of_spans.0 = true;
-                            }
-                            Some(ExistenceChange::Added) => panic!(),
-                            None => {
-                                // println!("writing old nil(1) {}", next.normal());
-                                line_of_spans_unformatted_len += next_span.len();
-                                write!(line_of_spans.1, "{}", next_span.normal())?;
-                            }
-                        }
-                        // println!("pushing old(1) {running_string}");
-                        while line_of_spans_unformatted_len < old_col_max_width {
-                            line_of_spans.1.push(' ');
-                            line_of_spans_unformatted_len += 1;
-                        }
-                        output_lines.push(format!(
-                            "{} {}",
-                            if line_of_spans.0 {
-                                "-".red()
-                            } else {
-                                " ".red()
-                            },
-                            line_of_spans.1.clone()
-                        ));
-                        line_of_spans.1.clear();
-                        line_of_spans.0 = false;
-
-                        line_of_spans_unformatted_len = 2;
-                        while let Some(line) = code_lines.next() {
-                            match change {
-                                Some(ExistenceChange::Deleted) => {
-                                    if code_lines.peek().is_some()
-                                        || (code_lines.peek().is_none() && code.0.ends_with('\n'))
-                                    {
-                                        // println!("pushing old del(1) {}", line.red());
-                                        let gap = old_col_max_width.saturating_sub(line.len());
-                                        let full_line_span =
-                                            format!("{} {line}{}", "-".red(), " ".repeat(gap));
-                                        output_lines.push(full_line_span.red().to_string());
-                                    } else {
-                                        // the last piece and not terminated with \n
-                                        // println!("writing old del (2){}", line.red());
-                                        line_of_spans_unformatted_len += line.len();
-                                        write!(line_of_spans.1, "{}", line.red())?;
-                                        line_of_spans.0 = true;
-                                    }
-                                }
-                                Some(ExistenceChange::Added) => panic!(),
-                                None => {
-                                    if code_lines.peek().is_some()
-                                        || (code_lines.peek().is_none() && code.0.ends_with('\n'))
-                                    {
-                                        // println!("pushing old nil(1) {}", line.normal());
-                                        let gap = old_col_max_width.saturating_sub(line.len());
-                                        let line = format!("  {line}{}", " ".repeat(gap));
-                                        output_lines.push(line.normal().to_string())
-                                    } else {
-                                        // the last piece and not terminated with \n
-                                        // println!("writing old nil (2){}", line.normal());
-                                        line_of_spans_unformatted_len += line.len();
-                                        write!(line_of_spans.1, "{}", line.normal())?;
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        match change {
-                            Some(ExistenceChange::Deleted) => {
-                                // println!("writing old del(3) {}", code.0.red());
-                                line_of_spans_unformatted_len += code.0.len();
-                                write!(line_of_spans.1, "{}", code.0.red())?;
-                                line_of_spans.0 = true;
-                            }
-                            Some(ExistenceChange::Added) => panic!(),
-                            None => {
-                                // println!("writing old nil(3){}", code.0.normal());
-                                line_of_spans_unformatted_len += code.0.len();
-                                write!(line_of_spans.1, "{}", code.0.normal())?;
-                            }
-                        }
-                    }
-                }
-
-                if !line_of_spans.1.is_empty() {
-                    while line_of_spans_unformatted_len < old_col_max_width {
-                        line_of_spans.1.push(' ');
-                        line_of_spans_unformatted_len += 1;
-                    }
-                    output_lines.push(format!(
-                        "{} {}",
-                        if line_of_spans.0 {
-                            "-".red()
-                        } else {
-                            " ".red()
-                        },
-                        line_of_spans.1
-                    ));
-                }
-
-                for line in output_lines.into_iter() {
-                    old_section.push(line);
-                }
-            }
-
-            if let Some(new) = &vd.new {
-                let mut output_lines = Vec::new();
-                let mut line_of_spans = (false, String::new());
-                for (change, code) in new {
-                    if code.0.contains("\n") {
-                        let mut code_lines = code.0.lines().peekable();
-                        let next_span = code_lines.next().unwrap();
-                        match change {
-                            Some(ExistenceChange::Added) => {
-                                // println!("writing new add(1){}", next.green());
-                                write!(line_of_spans.1, "{}", next_span.green())?;
-                                line_of_spans.0 = true;
-                            }
-                            Some(ExistenceChange::Deleted) => panic!(),
-                            None => {
-                                // println!("writing new del(1){}", next.normal());
-                                write!(line_of_spans.1, "{}", next_span.normal())?;
-                            }
-                        }
-                        // println!("pushing new(1) {running_string}");
-                        output_lines.push(format!(
-                            "{} {}",
-                            if line_of_spans.0 {
-                                "+".green()
-                            } else {
-                                " ".green()
-                            },
-                            line_of_spans.1.clone()
-                        ));
-                        line_of_spans.1.clear();
-                        line_of_spans.0 = false;
-
-                        while let Some(full_line_span) = code_lines.next() {
-                            match change {
-                                Some(ExistenceChange::Added) => {
-                                    if code_lines.peek().is_some()
-                                        || (code_lines.peek().is_none() && code.0.ends_with('\n'))
-                                    {
-                                        // println!("pushing new add(2){}", line.green());
-                                        output_lines.push(format!(
-                                            "{} {}",
-                                            "+".green(),
-                                            full_line_span.green()
-                                        ));
-                                    } else {
-                                        // the last piece and not terminated with \n
-                                        // println!("writing new add(2){}", line.green());
-                                        write!(line_of_spans.1, "{}", full_line_span.green())?;
-                                        line_of_spans.0 = true;
-                                    }
-                                }
-                                Some(ExistenceChange::Deleted) => panic!(),
-                                None => {
-                                    if code_lines.peek().is_some()
-                                        || (code_lines.peek().is_none() && code.0.ends_with('\n'))
-                                    {
-                                        // println!("pushing {}", line.normal());
-                                        output_lines.push(full_line_span.normal().to_string())
-                                    } else {
-                                        // the last piece and not terminated with \n
-                                        // println!("writing new nil (2){}", line.normal());
-                                        write!(line_of_spans.1, "{}", full_line_span.normal())?;
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        match change {
-                            Some(ExistenceChange::Added) => {
-                                // println!("writing {}", code.0.green());
-                                write!(line_of_spans.1, "{}", code.0.green())?;
-                                line_of_spans.0 = true;
-                            }
-                            Some(ExistenceChange::Deleted) => panic!(),
-                            None => {
-                                // println!("writing {}", code.0.normal());
-                                write!(line_of_spans.1, "{}", code.0.normal())?;
-                            }
-                        }
-                    }
-                }
-
-                if !line_of_spans.1.is_empty() {
-                    output_lines.push(format!(
-                        "{} {}",
-                        if line_of_spans.0 {
-                            "+".green()
-                        } else {
-                            " ".green()
-                        },
-                        line_of_spans.1
-                    ));
-                }
-
-                for line in output_lines.into_iter() {
-                    new_section.push(line);
-                }
-            }
-
-            while old_section.len() < new_section.len() {
-                old_section.push(" ".repeat(old_col_max_width));
-            }
-
-            while new_section.len() < old_section.len() {
-                new_section.push(String::new());
-            }
-
-            assert!(!(old_section.is_empty() || new_section.is_empty()));
-            assert_eq!(old_section.len(), new_section.len());
-
-            old_section.push(" ".repeat(old_col_max_width));
-            new_section.push(String::new());
-
-            // dbg!(&old_section);
-            // dbg!(&new_section);
-
-            old_col.append(&mut old_section);
-            new_col.append(&mut new_section);
-        }
-
-        assert_eq!(old_col.len(), new_col.len());
-        let left_right = old_col.iter().zip(new_col.iter());
-        let mut formatted_output = String::new();
-
-        for (left, right) in left_right {
-            let format_str = format!("{left}      {right}\n");
-            formatted_output.push_str(&format_str);
-        }
-
-        write!(f, "{}", formatted_output.trim_end())
+        write!(f, "{}", self.to_terminal())
     }
 }
-
 #[derive(Debug)]
 pub struct ViewableDiff {
     old: Option<Vec<(Option<ExistenceChange>, Code)>>,
@@ -764,80 +796,45 @@ impl Display for OverviewDiff {
             return Ok(());
         }
 
-        const MAX_HEADER_WIDTH: usize = 40;
-
         let fp1 = &self.file1.to_str().unwrap();
         let fp2 = &self.file2.to_str().unwrap();
-        let header = underlined(&format!("{fp1} -> {fp2}"));
-        let mut string_builder = String::new();
-        writeln!(&mut string_builder, "{header}")?;
+        let header = if fp1 == fp2 {
+            (*fp1).to_owned()
+        } else {
+            format!("{fp1} → {fp2}")
+        };
+        let mut sections = Vec::new();
 
-        if !self.uses_diff.is_empty() {
-            let viewable_uses = self.uses_diff.as_viewable();
-            writeln!(
-                &mut string_builder,
-                "{}",
-                underlined(&format!("Use{}", " ".repeat(MAX_HEADER_WIDTH - 3)))
-            )?;
-            writeln!(&mut string_builder, "{viewable_uses}")?;
+        macro_rules! render_section {
+            ($title:literal, $diff:expr) => {
+                if !$diff.is_empty() {
+                    let view = $diff.as_viewable();
+                    sections.push(format!(
+                        "{}\n{}",
+                        terminal_header($title),
+                        view.to_terminal()
+                    ));
+                }
+            };
         }
 
-        if !self.structs_diff.is_empty() {
-            let viewable_structs = self.structs_diff.as_viewable();
-            writeln!(
-                &mut string_builder,
-                "\n{}",
-                underlined(&format!("Struct{}", " ".repeat(MAX_HEADER_WIDTH - 7)))
-            )?;
-            writeln!(&mut string_builder, "{viewable_structs}")?;
-        }
+        render_section!("Uses", self.uses_diff);
+        render_section!("Structs", self.structs_diff);
+        render_section!("Enums", self.enums_diff);
+        render_section!("Traits", self.traits_diff);
+        render_section!("Functions", self.functions_diff);
+        render_section!("Impls", self.impls_diff);
 
-        if !self.enums_diff.is_empty() {
-            let viewable_enums = self.enums_diff.as_viewable();
-            writeln!(
-                &mut string_builder,
-                "\n{}",
-                underlined(&format!("Enum{}", " ".repeat(MAX_HEADER_WIDTH - 5)))
-            )?;
-            writeln!(&mut string_builder, "{viewable_enums}")?;
-        }
-
-        if !self.traits_diff.is_empty() {
-            let viewable_traits = self.traits_diff.as_viewable();
-            writeln!(
-                &mut string_builder,
-                "\n{}",
-                underlined(&format!("Trait{}", " ".repeat(MAX_HEADER_WIDTH - 6)))
-            )?;
-            writeln!(&mut string_builder, "{viewable_traits}",)?;
-        }
-
-        if !self.functions_diff.is_empty() {
-            let viewable_funcs = self.functions_diff.as_viewable();
-            writeln!(
-                &mut string_builder,
-                "\n{}",
-                underlined(&format!("Function{}", " ".repeat(MAX_HEADER_WIDTH - 9)))
-            )?;
-            writeln!(&mut string_builder, "{}", viewable_funcs)?;
-        }
-
-        if !self.impls_diff.is_empty() {
-            let viewable_impls = self.impls_diff.as_viewable();
-            writeln!(
-                &mut string_builder,
-                "\n{}",
-                underlined(&format!("Impl{}", " ".repeat(MAX_HEADER_WIDTH - 5)))
-            )?;
-            writeln!(&mut string_builder, "{viewable_impls}",)?;
-        }
-
-        while string_builder.ends_with('\n') {
-            string_builder.pop().unwrap();
-        }
-
-        write!(f, "{string_builder}")
+        write!(f, "{}\n{}", header.bold().reversed(), sections.join("\n\n"))
     }
+}
+
+fn terminal_header(title: &str) -> String {
+    let title: String = title.chars().take(TERMINAL_HEADER_WIDTH).collect();
+    format!("{title:<TERMINAL_HEADER_WIDTH$}")
+        .bold()
+        .reversed()
+        .to_string()
 }
 
 /// Returns the pathname with an underline of the same length.
@@ -1046,6 +1043,17 @@ fn escape_html(input: &str) -> String {
 #[cfg(test)]
 mod rendering_tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static COLOR_OVERRIDE: Mutex<()> = Mutex::new(());
+
+    fn with_colors<T>(enabled: bool, render: impl FnOnce() -> T) -> T {
+        let _guard = COLOR_OVERRIDE.lock().unwrap();
+        colored::control::set_override(enabled);
+        let rendered = render();
+        colored::control::set_override(false);
+        rendered
+    }
 
     fn overview(path: &str, source: &str) -> Overview {
         Overview::try_from((PathBuf::from(path), source.to_owned())).unwrap()
@@ -1055,10 +1063,60 @@ mod rendering_tests {
         overview("before.rs", before).diff_with(&overview("after.rs", after))
     }
 
-    #[test]
-    fn terminal_renderer_keeps_changes_in_side_by_side_columns() {
-        colored::control::set_override(false);
+    fn assert_highlighted_case(
+        label: &str,
+        before: &str,
+        after: &str,
+        section: &str,
+        deleted: &[&str],
+        added: &[&str],
+    ) -> String {
+        let overview_diff = diff(before, after);
+        assert!(!overview_diff.all_empty(), "{label} produced no diff");
 
+        let html = overview_diff.to_html();
+        assert!(
+            html.contains(&format!("<tr><th colspan=\"2\">{section}</th></tr>")),
+            "{label} was not rendered in the {section} HTML section"
+        );
+
+        let (terminal, styled_section) = with_colors(true, || {
+            (overview_diff.to_string(), terminal_header(section))
+        });
+        assert!(
+            terminal.contains(&styled_section),
+            "{label} was not rendered in the {section} terminal section: {terminal:?}"
+        );
+
+        for expected in deleted {
+            let escaped = escape_html(expected);
+            assert!(
+                html.contains(&format!("<span class=\"deleted\">{escaped}")),
+                "{label} did not mark {expected:?} as deleted in HTML: {html}"
+            );
+            assert!(
+                terminal.contains(&format!("\u{1b}[31m{expected}\u{1b}[0m")),
+                "{label} did not highlight {expected:?} as deleted in the terminal: {terminal:?}"
+            );
+        }
+
+        for expected in added {
+            let escaped = escape_html(expected);
+            assert!(
+                html.contains(&format!("<span class=\"added\">{escaped}")),
+                "{label} did not mark {expected:?} as added in HTML: {html}"
+            );
+            assert!(
+                terminal.contains(&format!("\u{1b}[32m{expected}\u{1b}[0m")),
+                "{label} did not highlight {expected:?} as added in the terminal: {terminal:?}"
+            );
+        }
+
+        terminal
+    }
+
+    #[test]
+    fn terminal_renderer_uses_unified_change_lines() {
         let view = ViewableDiffs::new(vec![ViewableDiff {
             old: Some(vec![(
                 Some(ExistenceChange::Deleted),
@@ -1070,8 +1128,304 @@ mod rendering_tests {
             )]),
         }]);
 
-        let expected = format!("- fn old(){}      + fn new()", " ".repeat(40));
-        assert_eq!(view.to_string(), expected);
+        assert_eq!(
+            with_colors(false, || view.to_string()),
+            "- fn old()\n+ fn new()"
+        );
+    }
+
+    #[test]
+    fn terminal_renderer_highlights_only_changed_spans() {
+        let view = ViewableDiffs::new(vec![ViewableDiff {
+            old: Some(vec![
+                (None, Code("fn ".to_owned())),
+                (Some(ExistenceChange::Deleted), Code("old".to_owned())),
+                (None, Code("()".to_owned())),
+            ]),
+            new: Some(vec![
+                (None, Code("fn ".to_owned())),
+                (Some(ExistenceChange::Added), Code("new".to_owned())),
+                (None, Code("()".to_owned())),
+            ]),
+        }]);
+
+        assert_eq!(
+            with_colors(true, || view.to_string()),
+            concat!(
+                "\u{1b}[31m-\u{1b}[0m fn \u{1b}[31mold\u{1b}[0m()\n",
+                "\u{1b}[32m+\u{1b}[0m fn \u{1b}[32mnew\u{1b}[0m()"
+            )
+        );
+    }
+
+    #[test]
+    fn terminal_overview_uses_compact_sections_and_keeps_elision_markers() {
+        let before = r#"struct Record {
+    keep: bool,
+    stable: String,
+    old: u8,
+}
+"#;
+        let after = r#"struct Record {
+    keep: bool,
+    stable: String,
+    new: u16,
+}
+"#;
+
+        let header = format!("{:<TERMINAL_HEADER_WIDTH$}", "Structs");
+        let expected = format!(
+            "before.rs → after.rs\n{header}\n  struct Record {{\n      ..\n-     old: u8\n+     new: u16\n  }}",
+        );
+        assert_eq!(
+            with_colors(false, || diff(before, after).to_string()),
+            expected
+        );
+    }
+
+    #[test]
+    fn terminal_renderer_factors_unchanged_function_signature_context() {
+        let header = format!("{:<TERMINAL_HEADER_WIDTH$}", "Functions");
+        let expected = format!(
+            "before.rs → after.rs\n{header}\n  fn new(\n-     revision1: String, revision2: Option<String>\n+     commit1: String, commit2: Option<String>\n  ) -> Self",
+        );
+        assert_eq!(
+            with_colors(false, || {
+                diff(
+                    "fn new(revision1: String, revision2: Option<String>) -> Self { todo!() }",
+                    "fn new(commit1: String, commit2: Option<String>) -> Self { todo!() }",
+                )
+                .to_string()
+            }),
+            expected
+        );
+    }
+
+    #[test]
+    fn terminal_renderer_merges_context_inside_a_declaration() {
+        let terminal = with_colors(false, || {
+            diff(
+                r#"enum Command {
+    Keep,
+    #[doc = "old"]
+    Diff {
+        old: String,
+    },
+}"#,
+                r#"enum Command {
+    Keep,
+    #[doc = "new"]
+    Diff {
+        new: String,
+    },
+}"#,
+            )
+            .to_string()
+        });
+
+        assert_eq!(terminal.matches("Diff {").count(), 1, "{terminal}");
+        assert!(terminal.contains("-     #[doc = \"old\"]"), "{terminal}");
+        assert!(terminal.contains("+     #[doc = \"new\"]"), "{terminal}");
+        assert!(terminal.contains("-         old: String"), "{terminal}");
+        assert!(terminal.contains("+         new: String"), "{terminal}");
+    }
+
+    #[test]
+    fn renders_every_supported_top_level_item() {
+        let cases = [
+            (
+                "use declarations",
+                "use old::Thing;\n",
+                "use new::Thing;\n",
+                "Uses",
+                "use old::Thing",
+                "use new::Thing",
+            ),
+            (
+                "struct declarations",
+                "struct Removed;\n",
+                "struct Added;\n",
+                "Structs",
+                "struct Removed;",
+                "struct Added;",
+            ),
+            (
+                "enum declarations",
+                "enum Removed { Variant }\n",
+                "enum Added { Variant }\n",
+                "Enums",
+                "enum Removed { Variant }",
+                "enum Added { Variant }",
+            ),
+            (
+                "trait declarations",
+                "trait Removed { fn run(&self); }\n",
+                "trait Added { fn run(&self); }\n",
+                "Traits",
+                "trait Removed { fn run(&self); }",
+                "trait Added { fn run(&self); }",
+            ),
+            (
+                "free functions",
+                "fn removed() {}\n",
+                "fn added() {}\n",
+                "Functions",
+                "fn removed()",
+                "fn added()",
+            ),
+            (
+                "impl blocks",
+                "struct Old; impl Old { fn run(&self) {} }\n",
+                "struct New; impl New { fn run(&self) {} }\n",
+                "Impls",
+                "fn run(&self)",
+                "fn run(&self)",
+            ),
+        ];
+
+        for (label, before, after, section, deleted, added) in cases {
+            assert_highlighted_case(label, before, after, section, &[deleted], &[added]);
+        }
+    }
+
+    #[test]
+    fn renders_supported_struct_elements_and_preserves_elision() {
+        let terminal = assert_highlighted_case(
+            "named struct fields, visibility, generics, and where predicates",
+            "pub struct Record<T> where T: Copy { keep: bool, stable: u8, old: T }\n",
+            "pub(crate) struct Record<T, U> where T: Copy, U: Clone { keep: bool, stable: u8, new: U }\n",
+            "Structs",
+            &["pub", "<T>", "old: T"],
+            &["pub(crate)", "<T, U>", "U: Clone", "new: U"],
+        );
+        assert!(
+            terminal.contains(".."),
+            "unchanged fields must remain visibly elided: {terminal:?}"
+        );
+
+        assert_highlighted_case(
+            "named field modifications",
+            "struct Record { value: u8 }\n",
+            "struct Record { value: String }\n",
+            "Structs",
+            &["value: u8"],
+            &["value: String"],
+        );
+        assert_highlighted_case(
+            "tuple struct fields",
+            "struct Record(pub u8, String);\n",
+            "struct Record(pub u16, String, bool);\n",
+            "Structs",
+            &["pub u8"],
+            &["pub u16", "bool"],
+        );
+        assert_highlighted_case(
+            "unit and named struct forms",
+            "struct Record;\n",
+            "struct Record { value: u8 }\n",
+            "Structs",
+            &[],
+            &["value: u8"],
+        );
+    }
+
+    #[test]
+    fn renders_supported_enum_elements() {
+        let terminal = assert_highlighted_case(
+            "enum visibility, generics, variants, and fields",
+            "pub enum Message<T> { Keep, Stable, Removed, Data { old: T } }\n",
+            "pub(crate) enum Message<T, U> { Keep, Stable, Added, Data { new: U } }\n",
+            "Enums",
+            &["pub", "<T>", "Removed", "old: T"],
+            &["pub(crate)", "<T, U>", "Added", "new: U"],
+        );
+        assert!(terminal.contains(".."), "unchanged variants must be elided");
+
+        assert_highlighted_case(
+            "tuple variant fields",
+            "enum Message { Data(u8, String) }\n",
+            "enum Message { Data(u16, String, bool) }\n",
+            "Enums",
+            &["u8"],
+            &["u16", "bool"],
+        );
+        assert_highlighted_case(
+            "unit and named variant forms",
+            "enum Message { Data }\n",
+            "enum Message { Data { value: u8 } }\n",
+            "Enums",
+            &[],
+            &["value: u8"],
+        );
+    }
+
+    #[test]
+    fn renders_every_supported_function_signature_element() {
+        assert_highlighted_case(
+            "function signature components",
+            r#"pub const unsafe extern "C" fn calculate<T>(value: T) -> u8 where T: Copy { 0 }"#,
+            r#"pub(crate) async extern "Rust" fn calculate<T, U>(value: U, extra: u8) -> u16 where U: Clone { 0 }"#,
+            "Functions",
+            &[
+                "pub",
+                "const",
+                "unsafe",
+                "extern \"C\"",
+                "<T>",
+                "value: T",
+                "-> u8",
+                "T: Copy",
+            ],
+            &[
+                "pub(crate)",
+                "async",
+                "extern \"Rust\"",
+                "<T, U>",
+                "value: U",
+                "extra: u8",
+                "-> u16",
+                "U: Clone",
+            ],
+        );
+    }
+
+    #[test]
+    fn renders_supported_trait_and_impl_elements() {
+        assert_highlighted_case(
+            "trait visibility, generics, and methods",
+            "pub trait Service<T> where T: Copy { fn run(&self, value: T) -> u8; }\n",
+            "pub(crate) trait Service<T, U> where U: Clone { fn run(&mut self, value: U) -> u16; fn stop(&self); }\n",
+            "Traits",
+            &["pub", "<T>", "T: Copy", "&self", "value: T", "-> u8"],
+            &[
+                "pub(crate)",
+                "<T, U>",
+                "U: Clone",
+                "&mut self",
+                "value: U",
+                "-> u16",
+                "fn stop(&self)",
+            ],
+        );
+
+        assert_highlighted_case(
+            "impl unsafety, generics, and methods",
+            "struct Service<T>(T); impl<T> Service<T> where T: Copy { fn run(&self, value: T) -> u8 { 0 } }\n",
+            "struct Service<T>(T); unsafe impl<T, U> Service<T> where U: Clone { pub async fn run(&mut self, value: U) -> u16 { 0 } fn stop(&self) {} }\n",
+            "Impls",
+            &["<T>", "T: Copy", "&self", "value: T", "-> u8"],
+            &[
+                "unsafe",
+                "<T, U>",
+                "U: Clone",
+                "pub",
+                "async",
+                "&mut self",
+                "value: U",
+                "-> u16",
+                "fn stop(&self)",
+            ],
+        );
     }
 
     #[test]
@@ -1177,11 +1531,10 @@ impl Record { fn method(&mut self, value: u8) {} }
 
     #[test]
     fn unchanged_overview_has_no_terminal_output() {
-        colored::control::set_override(false);
         let source = "struct Same { value: u8 }\n";
         let unchanged = diff(source, source);
 
         assert!(unchanged.all_empty());
-        assert_eq!(unchanged.to_string(), "");
+        assert_eq!(with_colors(false, || unchanged.to_string()), "");
     }
 }
